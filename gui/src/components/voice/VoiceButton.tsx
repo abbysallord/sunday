@@ -3,7 +3,7 @@ import { useChatStore } from "@/stores/chatStore";
 import { ws } from "@/services/websocket";
 import { Mic, MicOff, Loader2 } from "lucide-react";
 
-export function VoiceButton() {
+export function VoiceButton({ variant = "small" }: { variant?: "small" | "large" }) {
   const { voiceState, setVoiceState, isGenerating, activeConversationId } = useChatStore();
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -74,29 +74,39 @@ export function VoiceButton() {
 
   const isActive = voiceState === "listening";
   const isBusy = voiceState === "transcribing" || voiceState === "processing";
+  
+  const sizeClass = variant === "large" ? "p-5 rounded-full" : "p-3 rounded-xl";
+  const iconSize = variant === "large" ? 28 : 18;
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={isBusy || isGenerating}
-      className={`p-3 rounded-xl transition-all duration-200 flex-shrink-0 ${
-        isActive
-          ? "bg-sunday-error/20 text-sunday-error border border-sunday-error/40 animate-pulse-slow"
-          : isBusy
-            ? "bg-sunday-warning/20 text-sunday-warning border border-sunday-warning/40"
-            : "bg-sunday-surface border border-sunday-border text-sunday-text-muted hover:text-sunday-accent hover:border-sunday-accent/50"
-      } disabled:opacity-40 disabled:cursor-not-allowed`}
-      title={
-        isActive ? "Stop recording" : isBusy ? "Processing..." : "Start voice input"
-      }
-    >
-      {isBusy ? (
-        <Loader2 size={18} className="animate-spin" />
-      ) : isActive ? (
-        <MicOff size={18} />
-      ) : (
-        <Mic size={18} />
+    <div className="relative group">
+      {/* Glow Layer */}
+      {isActive && (
+         <div className={`absolute inset-0 rounded-full bg-sunday-error/30 animate-ping blur-md ${variant === "large" ? 'scale-150' : 'scale-125'}`}></div>
       )}
-    </button>
+
+      <button
+        onClick={handleClick}
+        disabled={isBusy || isGenerating}
+        className={`${sizeClass} transition-all duration-300 flex-shrink-0 flex items-center justify-center relative shadow-xl z-20 ${
+          isActive
+            ? "bg-sunday-error text-white border border-sunday-error shadow-sunday-error/40 scale-105"
+            : isBusy
+              ? "bg-sunday-warning/20 text-sunday-warning border border-sunday-warning/40 shadow-none"
+              : "bg-sunday-accent border border-transparent text-white hover:bg-sunday-accent-hover hover:scale-110 shadow-sunday-accent/30"
+        } disabled:opacity-40 disabled:cursor-not-allowed`}
+        title={
+          isActive ? "Stop recording" : isBusy ? "Processing..." : "Start voice input"
+        }
+      >
+        {isBusy ? (
+          <Loader2 size={iconSize} className="animate-spin" />
+        ) : isActive ? (
+          <MicOff size={iconSize} />
+        ) : (
+          <Mic size={iconSize} />
+        )}
+      </button>
+    </div>
   );
 }

@@ -13,9 +13,8 @@ Server sends JSON: {"type": "chat_stream"|"chat_end"|"tts_audio"|"error"|"title_
 
 import asyncio
 import base64
+import contextlib
 import json
-
-import numpy as np
 from fastapi import WebSocket, WebSocketDisconnect
 
 from sunday.agents.secretary.agent import SecretaryAgent
@@ -81,13 +80,11 @@ async def _generate_title(ws: WebSocket, conversation_id: str, user_text: str) -
         log.warning("conversation.title_generation_failed", error=str(e))
         title = user_text[:50] + ("..." if len(user_text) > 50 else "")
         await db.update_conversation_title(conversation_id, title)
-        try:
+        with contextlib.suppress(Exception):
             await _send_json(ws, WS_MSG_TITLE_UPDATE, {
                 "conversation_id": conversation_id,
                 "title": title,
             })
-        except Exception:
-            pass  # WebSocket may have closed
 
 
 async def _handle_chat(ws: WebSocket, data: dict) -> None:

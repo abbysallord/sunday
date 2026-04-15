@@ -8,10 +8,10 @@ to a provider directly — always through this abstraction.
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class ProviderStatus(str, Enum):
+class ProviderStatus(StrEnum):
     """Health status of an LLM provider."""
 
     AVAILABLE = "available"

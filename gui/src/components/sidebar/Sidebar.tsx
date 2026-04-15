@@ -1,9 +1,9 @@
 import { useChatStore } from "@/stores/chatStore";
 import { ConversationList } from "./ConversationList";
-import { MessageSquarePlus, Wifi, WifiOff, Loader2 } from "lucide-react";
+import { MessageSquarePlus, Wifi, WifiOff, Loader2, Settings } from "lucide-react";
 
 export function Sidebar() {
-  const { connectionStatus, newConversation } = useChatStore();
+  const { connectionStatus, newConversation, setSettingsOpen } = useChatStore();
 
   return (
     <div className="flex flex-col h-full">
@@ -36,8 +36,15 @@ export function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div className="p-3 border-t border-sunday-border">
-        <p className="text-xs text-sunday-text-muted text-center">SUNDAY v0.1.0</p>
+      <div className="p-3 border-t border-sunday-border flex items-center justify-between">
+        <p className="text-xs text-sunday-text-muted">SUNDAY v0.1.0</p>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="p-1.5 rounded-lg text-sunday-text-muted hover:text-sunday-text hover:bg-sunday-surface-hover transition-colors"
+          title="Settings"
+        >
+          <Settings size={16} />
+        </button>
       </div>
     </div>
   );

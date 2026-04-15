@@ -32,6 +32,10 @@ interface ChatStore {
   stopGeneration: () => void;
   setVoiceState: (state: VoiceState) => void;
   clearError: () => void;
+
+  // Settings
+  isSettingsOpen: boolean;
+  setSettingsOpen: (open: boolean) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -43,6 +47,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   streamingContent: "",
   voiceState: "idle",
   errorMessage: null,
+  isSettingsOpen: false,
+
+  setSettingsOpen: (open) => set({ isSettingsOpen: open }),
 
   connect: async () => {
     // Guard against duplicate handler registration (React StrictMode calls effects twice)

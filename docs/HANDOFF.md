@@ -432,20 +432,20 @@ Silero VAD	$0	Local, no API
 SQLite	$0	Local file
 ChromaDB	$0	Local embedded
 GitHub	$0	Public repo (or free private)
-GitHub Actions	$0	Free for public repos
-Total	$0	
-When Funds Are Available (Future)
-Upgrade	Cost	Benefit
-GPU VPS (RTX 4090)	~$50-100/mo	Self-hosted LLMs, offline operation
-ElevenLabs API	~$5/mo	Higher quality TTS
-Dedicated server	~$30-80/mo	Always-on, multi-device access
-11. For the Next Agent Continuing This Work
-Immediate Next Steps (in order)
-1. GUI visual polish with Three.js and GSAP animations (planned)
-2. Test Tauri desktop mode: npm run tauri dev
-3. Test voice end-to-end in browser: mic → transcribe → LLM → TTS → playback
-4. Settings panel in GUI (theme, voice, provider selection)
-5. System tray integration
+GitHub Actions	$0	Free### Immediate Next Steps (in order)
+1. Write Automated Tests for agent features
+2. Distribute binaries using `npm run tauri build`
+
+## Test Matrix State
+### ✅ Passing
+- [x] Python dependencies: `poetry install` works cleanly
+- [x] Tauri Build Setup: Rust and frontend dependencies initialized beautifully
+- [x] Voice First Refactor: GUI has prominent voice interaction and hides text bar.
+- [x] Settings Subsystem: Python `.env` API saves to disk safely
+- [x] System Tray: Rust bindings keep window hidden nicely.
+
+### 🔄 In Progress
+- [ ] GUI visual polish (Three.js / GSAP animations — planned for later)
 6. Begin Tier 1 agent development: Memory Agent, Tool Calling Agent
 Completed Steps (for reference)
 - ✅ GUI tested in browser (vite dev server on port 1420)

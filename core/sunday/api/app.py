@@ -6,12 +6,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from sunday.api.middleware.errors import ErrorHandlerMiddleware
-from sunday.api.routes import chat, conversations, health
+from sunday.api.routes import chat, conversations, health, settings
 from sunday.api.websocket.handler import websocket_endpoint
 from sunday.config.constants import APP_FULL_NAME, APP_NAME, APP_VERSION
 from sunday.database.engine import db
 from sunday.utils.logging import log
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -48,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(chat.router, prefix="/api")
     app.include_router(conversations.router, prefix="/api")
+    app.include_router(settings.router, prefix="/api/settings")
 
     # WebSocket
     app.add_api_websocket_route("/ws", websocket_endpoint)

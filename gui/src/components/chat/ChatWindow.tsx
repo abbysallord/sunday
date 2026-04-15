@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChatStore } from "@/stores/chatStore";
 import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
@@ -11,19 +11,21 @@ export function ChatWindow() {
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const [showInputBar, setShowInputBar] = useState(false);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-sunday-bg">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto relative">
         {messages.length === 0 && !isGenerating ? (
           <WelcomeScreen />
         ) : (
-          <div className="max-w-3xl mx-auto px-4 py-6 space-y-4">
+          <div className="max-w-3xl mx-auto px-4 py-6 space-y-4 pb-32">
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
@@ -39,8 +41,8 @@ export function ChatWindow() {
 
       {/* Error toast */}
       {errorMessage && (
-        <div className="max-w-3xl mx-auto px-4 w-full animate-slide-up">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-sunday-error/10 border border-sunday-error/30 text-sm text-sunday-error">
+        <div className="max-w-3xl mx-auto px-4 w-full animate-slide-up absolute bottom-[140px] left-0 right-0 z-20">
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-sunday-error/10 border border-sunday-error/30 text-sm text-sunday-error shadow-xl shadow-sunday-error/5">
             <AlertTriangle size={16} className="flex-shrink-0" />
             <p className="flex-1">{errorMessage}</p>
             <button
@@ -53,19 +55,35 @@ export function ChatWindow() {
         </div>
       )}
 
-      {/* Input area */}
-      <div className="border-t border-sunday-border bg-sunday-surface/50 backdrop-blur-sm">
-        <div className="max-w-3xl mx-auto px-4 py-3">
-          <div className="flex items-end gap-2">
-            <VoiceButton />
-            <InputBar />
-          </div>
-          <p className="text-[10px] text-sunday-text-muted text-center mt-2 select-none opacity-60">
-            Press <kbd className="px-1 py-0.5 rounded bg-sunday-surface-hover text-sunday-text-muted">/</kbd> to focus
+      {/* Voice-First Input area */}
+      <div className="border-t border-sunday-border bg-sunday-surface/80 backdrop-blur-xl z-10 pb-6 relative rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.3)]">
+        {/* Toggle Keyboard Button */}
+        <div className="absolute top-0 right-8 -translate-y-1/2">
+           <button 
+             onClick={() => setShowInputBar(!showInputBar)} 
+             className="p-3 bg-sunday-surface-hover border gap-2 flex items-center border-sunday-border rounded-full hover:bg-sunday-border hover:text-sunday-text text-sunday-text-muted shadow-[0_0_20px_rgba(0,0,0,0.2)] transition-all duration-300"
+           >
+             <kbd className="font-sans text-xs">keyboard</kbd>
+           </button>
+        </div>
+
+        <div className="max-w-3xl mx-auto px-6 mt-8 relative">
+           
+           <div className={`flex flex-col items-center gap-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${showInputBar ? 'opacity-100 translate-y-0 relative' : 'opacity-0 translate-y-8 absolute pointer-events-none'}`}>
+               <div className="w-full">
+                 <InputBar />
+               </div>
+           </div>
+
+           {/* Voice Button Area - Prominent */}
+           <div className={`flex justify-center transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!showInputBar ? 'scale-125 translate-y-0 mt-4' : 'scale-100 translate-y-16 absolute opacity-0 pointer-events-none'}`}>
+               <VoiceButton variant="large" />
+           </div>
+           
+           <p className="text-[10px] text-sunday-text-muted text-center mt-6 select-none opacity-50 tracking-wide font-medium">
+            PRESS <kbd className="px-1 py-0.5 rounded bg-sunday-surface-hover text-sunday-text-muted">/</kbd> TO TYPE
             {" · "}
-            <kbd className="px-1 py-0.5 rounded bg-sunday-surface-hover text-sunday-text-muted">Ctrl+Shift+N</kbd> new chat
-            {" · "}
-            <kbd className="px-1 py-0.5 rounded bg-sunday-surface-hover text-sunday-text-muted">Esc</kbd> stop
+            <kbd className="px-1 py-0.5 rounded bg-sunday-surface-hover text-sunday-text-muted">ESC</kbd> TO STOP
           </p>
         </div>
       </div>

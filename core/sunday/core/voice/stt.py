@@ -4,9 +4,7 @@ Runs entirely locally on CPU. The 'base.en' model is ~150MB,
 optimized for English, and fast enough for real-time on modern CPUs.
 """
 
-import io
 import tempfile
-from pathlib import Path
 
 import numpy as np
 
