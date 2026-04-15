@@ -28,6 +28,7 @@ class LLMResponse:
     model: str
     provider: str
     usage: dict[str, int] = field(default_factory=dict)  # prompt_tokens, completion_tokens
+    tool_calls: list[dict] = field(default_factory=list)
     finish_reason: str = "stop"
 
 
@@ -43,6 +44,7 @@ class BaseLLMProvider(ABC):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
         """Generate a complete response."""
         ...
@@ -54,6 +56,7 @@ class BaseLLMProvider(ABC):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream response tokens one by one."""
         ...

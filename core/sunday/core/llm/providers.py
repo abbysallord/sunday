@@ -28,9 +28,14 @@ class GroqProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
         model = model or self.default_model
         litellm_model = f"groq/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -39,16 +44,30 @@ class GroqProvider(BaseLLMProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=self.api_key,
+                **kwargs,
             )
+
+            tool_calls = []
+            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+                for tc in response.choices[0].message.tool_calls:
+                    tool_calls.append({
+                        "id": getattr(tc, "id", ""),
+                        "type": getattr(tc, "type", "function"),
+                        "function": {
+                            "name": getattr(tc.function, "name", ""),
+                            "arguments": getattr(tc.function, "arguments", "")
+                        }
+                    })
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",
                 model=model,
                 provider=self.name,
                 usage={
-                    "prompt_tokens": response.usage.prompt_tokens,
-                    "completion_tokens": response.usage.completion_tokens,
+                    "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
+                    "completion_tokens": getattr(response.usage, "completion_tokens", 0),
                 },
+                tool_calls=tool_calls,
                 finish_reason=response.choices[0].finish_reason or "stop",
             )
         except Exception as e:
@@ -61,9 +80,14 @@ class GroqProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         model = model or self.default_model
         litellm_model = f"groq/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -73,6 +97,7 @@ class GroqProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
                 api_key=self.api_key,
                 stream=True,
+                **kwargs,
             )
 
             async for chunk in response:
@@ -117,9 +142,14 @@ class GoogleProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
         model = model or self.default_model
         litellm_model = f"gemini/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -128,7 +158,20 @@ class GoogleProvider(BaseLLMProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_key=self.api_key,
+                **kwargs,
             )
+
+            tool_calls = []
+            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+                for tc in response.choices[0].message.tool_calls:
+                    tool_calls.append({
+                        "id": getattr(tc, "id", ""),
+                        "type": getattr(tc, "type", "function"),
+                        "function": {
+                            "name": getattr(tc.function, "name", ""),
+                            "arguments": getattr(tc.function, "arguments", "")
+                        }
+                    })
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",
@@ -138,6 +181,7 @@ class GoogleProvider(BaseLLMProvider):
                     "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
                     "completion_tokens": getattr(response.usage, "completion_tokens", 0),
                 },
+                tool_calls=tool_calls,
                 finish_reason=response.choices[0].finish_reason or "stop",
             )
         except Exception as e:
@@ -150,9 +194,14 @@ class GoogleProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         model = model or self.default_model
         litellm_model = f"gemini/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -162,6 +211,7 @@ class GoogleProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
                 api_key=self.api_key,
                 stream=True,
+                **kwargs,
             )
 
             async for chunk in response:
@@ -206,9 +256,14 @@ class OllamaProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> LLMResponse:
         model = model or self.default_model
         litellm_model = f"ollama/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -217,7 +272,20 @@ class OllamaProvider(BaseLLMProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_base=self.base_url,
+                **kwargs,
             )
+
+            tool_calls = []
+            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+                for tc in response.choices[0].message.tool_calls:
+                    tool_calls.append({
+                        "id": getattr(tc, "id", ""),
+                        "type": getattr(tc, "type", "function"),
+                        "function": {
+                            "name": getattr(tc.function, "name", ""),
+                            "arguments": getattr(tc.function, "arguments", "")
+                        }
+                    })
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",
@@ -227,6 +295,7 @@ class OllamaProvider(BaseLLMProvider):
                     "prompt_tokens": getattr(response.usage, "prompt_tokens", 0),
                     "completion_tokens": getattr(response.usage, "completion_tokens", 0),
                 },
+                tool_calls=tool_calls,
                 finish_reason=response.choices[0].finish_reason or "stop",
             )
         except Exception as e:
@@ -239,9 +308,14 @@ class OllamaProvider(BaseLLMProvider):
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         model = model or self.default_model
         litellm_model = f"ollama/{model}"
+
+        kwargs = {}
+        if tools:
+            kwargs["tools"] = tools
 
         try:
             response = await litellm.acompletion(
@@ -251,6 +325,7 @@ class OllamaProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
                 api_base=self.base_url,
                 stream=True,
+                **kwargs,
             )
 
             async for chunk in response:

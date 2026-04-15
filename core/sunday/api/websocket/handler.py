@@ -18,6 +18,9 @@ import json
 from fastapi import WebSocket, WebSocketDisconnect
 
 from sunday.agents.secretary.agent import SecretaryAgent
+from sunday.agents.tools.agent import ToolCallingAgent
+from sunday.agents.memory.agent import MemoryAgent
+from sunday.agents.research.agent import ResearchAgent
 from sunday.config.constants import (
     MAX_CONTEXT_MESSAGES,
     TITLE_GENERATION_PROMPT,
@@ -35,11 +38,32 @@ from sunday.config.constants import (
 from sunday.core.llm.router import llm_router
 from sunday.core.voice import stt, tts
 from sunday.database.engine import db
+from sunday.database.vector import vector_db
 from sunday.models.messages import Conversation, Message, MessageSource, Role
 from sunday.utils.audio import decode_audio
 from sunday.utils.logging import log
 
 _secretary = SecretaryAgent(llm_router=llm_router)
+_tool_agent = ToolCallingAgent(llm_router=llm_router)
+_memory_agent = MemoryAgent(llm_router=llm_router)
+_research_agent = ResearchAgent(llm_router=llm_router)
+
+def _determine_agent(text: str):
+    """Use basic heuristics to select specialized agents."""
+    text_lower = text.lower()
+    tool_keywords = ["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool"]
+    mem_keywords = ["remember", "past", "history", "previously", "last time", "did i say"]
+    rs_keywords = ["search", "who is", "news", "google", "website", "look up", "internet", "what is happening", "fetch"]
+    
+    if any(k in text_lower for k in rs_keywords):
+        return _research_agent
+    if any(k in text_lower for k in tool_keywords):
+        # Additional safety to avoid matching 'cost' or other generic words
+        # but string search is rough.
+        return _tool_agent
+    if any(k in text_lower for k in mem_keywords):
+        return _memory_agent
+    return _secretary
 
 
 async def _send_json(ws: WebSocket, msg_type: str, data: dict) -> None:
@@ -110,6 +134,11 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
     user_msg = Message(role=Role.USER, content=text, source=MessageSource.TEXT)
     conversation.add_message(user_msg)
     await db.save_message(conversation.id, user_msg)
+    
+    # Store passive context memory
+    asyncio.create_task(asyncio.to_thread(
+        vector_db.add_memory, user_msg.id, f"User: {user_msg.content}", {"conversation_id": conversation.id}
+    ))
 
     # Notify client of conversation ID (important for new conversations)
     await _send_json(ws, WS_MSG_STATUS, {
@@ -121,8 +150,9 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
     context = conversation.get_context_messages(MAX_CONTEXT_MESSAGES)[:-1]
     full_response = []
 
+    active_agent = _determine_agent(text)
     try:
-        async for token in _secretary.stream(message=user_msg, context=context):
+        async for token in active_agent.stream(message=user_msg, context=context):
             full_response.append(token)
             await _send_json(ws, WS_MSG_CHAT_STREAM, {
                 "token": token,
@@ -135,6 +165,11 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
         assistant_msg = Message(role=Role.ASSISTANT, content=response_text)
         conversation.add_message(assistant_msg)
         await db.save_message(conversation.id, assistant_msg)
+        
+        # Store passive context memory
+        asyncio.create_task(asyncio.to_thread(
+            vector_db.add_memory, assistant_msg.id, f"SUNDAY: {assistant_msg.content}", {"conversation_id": conversation.id}
+        ))
 
         # Smart title generation (only for the first exchange)
         if len(conversation.messages) <= 2:
@@ -187,7 +222,7 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
         await _send_json(ws, WS_MSG_ERROR, {"message": "Audio decoding failed or empty audio"})
         return
 
-    transcribed_text = stt.transcribe_numpy(audio_array)
+    transcribed_text = await asyncio.to_thread(stt.transcribe_numpy, audio_array)
 
     if not transcribed_text:
         await _send_json(ws, WS_MSG_ERROR, {"message": "Could not transcribe audio"})
@@ -214,6 +249,11 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
     user_msg = Message(role=Role.USER, content=transcribed_text, source=MessageSource.VOICE)
     conversation.add_message(user_msg)
     await db.save_message(conversation.id, user_msg)
+    
+    # Store passive context memory
+    asyncio.create_task(asyncio.to_thread(
+        vector_db.add_memory, user_msg.id, f"User ({user_msg.source}): {user_msg.content}", {"conversation_id": conversation.id}
+    ))
 
     await _send_json(ws, WS_MSG_STATUS, {
         "status": "processing",
@@ -225,8 +265,9 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
     full_response = []
     sentence_buffer = []
 
+    active_agent = _determine_agent(transcribed_text)
     try:
-        async for token in _secretary.stream(message=user_msg, context=context):
+        async for token in active_agent.stream(message=user_msg, context=context):
             full_response.append(token)
             sentence_buffer.append(token)
 
@@ -239,7 +280,7 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
             # Check if we have a complete sentence to synthesize
             current_text = "".join(sentence_buffer)
             if any(current_text.rstrip().endswith(p) for p in [".", "!", "?", "\n"]):
-                audio_data = tts.synthesize(current_text.strip())
+                audio_data = await asyncio.to_thread(tts.synthesize, current_text.strip())
                 if audio_data:
                     await _send_json(ws, WS_MSG_TTS_AUDIO, {
                         "audio": base64.b64encode(audio_data).decode("ascii"),
@@ -250,7 +291,7 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
         # Synthesize any remaining text
         remaining = "".join(sentence_buffer).strip()
         if remaining:
-            audio_data = tts.synthesize(remaining)
+            audio_data = await asyncio.to_thread(tts.synthesize, remaining)
             if audio_data:
                 await _send_json(ws, WS_MSG_TTS_AUDIO, {
                     "audio": base64.b64encode(audio_data).decode("ascii"),
@@ -263,6 +304,11 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
         assistant_msg = Message(role=Role.ASSISTANT, content=response_text)
         conversation.add_message(assistant_msg)
         await db.save_message(conversation.id, assistant_msg)
+        
+        # Store passive context memory
+        asyncio.create_task(asyncio.to_thread(
+            vector_db.add_memory, assistant_msg.id, f"SUNDAY: {assistant_msg.content}", {"conversation_id": conversation.id}
+        ))
 
         # Smart title generation (only for the first exchange)
         if len(conversation.messages) <= 2:

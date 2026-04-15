@@ -13,9 +13,16 @@ export function ChatWindow() {
 
   const [showInputBar, setShowInputBar] = useState(false);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom safely without shifting entire app
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      const container = messagesEndRef.current.closest('.overflow-y-auto');
+      if (container) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      } else {
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
   }, [messages, streamingContent]);
 
   return (

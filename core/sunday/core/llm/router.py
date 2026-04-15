@@ -79,6 +79,7 @@ class LLMRouter:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
         preferred_provider: str | None = None,
     ) -> LLMResponse:
         """Generate a response, automatically failing over to backup providers."""
@@ -101,6 +102,7 @@ class LLMRouter:
                     model=model if name == preferred_provider else None,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    tools=tools,
                 )
                 # Success — mark provider as healthy
                 self._status_cache[name] = ProviderStatus.AVAILABLE
@@ -133,6 +135,7 @@ class LLMRouter:
         model: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        tools: list[dict] | None = None,
         preferred_provider: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream response tokens, with automatic failover."""
@@ -156,6 +159,7 @@ class LLMRouter:
                     model=model if name == preferred_provider else None,
                     temperature=temperature,
                     max_tokens=max_tokens,
+                    tools=tools,
                 ):
                     token_count += 1
                     yield token
