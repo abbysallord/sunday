@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+
+# Node
+node_modules/
+gui/dist/
+gui/.vite/
+npm-debug.log*
+
+# Tauri
+gui/src-tauri/target/
+
+# Rust
+target/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Data (ALL runtime data)
+data/
+
+# OS
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp
+
+# Models (downloaded at runtime)
+models/
+*.bin
+*.onnx
+*.onnx.json
+*.pt
+*.pth
+
+# Torch / ML caches
+.cache/
