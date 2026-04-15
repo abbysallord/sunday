@@ -18,12 +18,17 @@ async def decode_audio(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray
     """
     cmd = [
         "ffmpeg",
-        "-i", "pipe:0",          # Input from stdin
-        "-f", "f32le",           # Output format: float 32-bit little endian
-        "-acodec", "pcm_f32le",  # Use PCM float 32-bit little endian codec
-        "-ar", str(target_sr),   # Set sample rate
-        "-ac", "1",              # Set mono channel
-        "pipe:1"                 # Output to stdout
+        "-i",
+        "pipe:0",  # Input from stdin
+        "-f",
+        "f32le",  # Output format: float 32-bit little endian
+        "-acodec",
+        "pcm_f32le",  # Use PCM float 32-bit little endian codec
+        "-ar",
+        str(target_sr),  # Set sample rate
+        "-ac",
+        "1",  # Set mono channel
+        "pipe:1",  # Output to stdout
     ]
 
     try:
@@ -31,7 +36,7 @@ async def decode_audio(audio_bytes: bytes, target_sr: int = 16000) -> np.ndarray
             *cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
 
         stdout, stderr = await process.communicate(input=audio_bytes)

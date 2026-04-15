@@ -12,6 +12,7 @@ from sunday.config.constants import APP_FULL_NAME, APP_NAME, APP_VERSION
 from sunday.database.engine import db
 from sunday.utils.logging import log
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup and shutdown."""

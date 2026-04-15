@@ -24,31 +24,37 @@ class AgentManager:
         package = sunday.agents
         prefix = package.__name__ + "."
 
-        for _, modname, ispkg in pkgutil.walk_packages(package.__path__, prefix):
+        for _, modname, _ispkg in pkgutil.walk_packages(package.__path__, prefix):
             if not modname.endswith(".agent"):
                 continue
 
             try:
                 module = importlib.import_module(modname)
-                for name, obj in inspect.getmembers(module, inspect.isclass):
+                for _name, obj in inspect.getmembers(module, inspect.isclass):
                     if (
-                        issubclass(obj, BaseAgent) 
-                        and obj.__module__ == module.__name__ 
+                        issubclass(obj, BaseAgent)
+                        and obj.__module__ == module.__name__
                         and not inspect.isabstract(obj)
                         and obj.__name__ not in ("BaseAgent", "BaseToolAgent")
                     ):
                         try:
                             agent_instance = obj(llm_router=self.llm_router)
                             agent_id = agent_instance.info.id
-                            
+
                             self.agents[agent_id] = agent_instance
-                            log.info("agent_manager.discovered", agent_id=agent_id, class_name=obj.__name__)
+                            log.info(
+                                "agent_manager.discovered",
+                                agent_id=agent_id,
+                                class_name=obj.__name__,
+                            )
 
                             if agent_id == "secretary":
                                 self.default_agent = agent_instance
                         except Exception as e:
-                            log.warning("agent_manager.init_failed", class_name=obj.__name__, error=str(e))
-                            
+                            log.warning(
+                                "agent_manager.init_failed", class_name=obj.__name__, error=str(e)
+                            )
+
             except Exception as e:
                 log.warning("agent_manager.import_failed", module=modname, error=str(e))
 
@@ -61,7 +67,7 @@ class AgentManager:
             raise RuntimeError("AgentManager contains zero loaded agents.")
 
         text_lower = text.lower()
-        
+
         for agent in self.agents.values():
             if agent.info.id == "secretary" or not agent.info.enabled:
                 continue
@@ -70,5 +76,5 @@ class AgentManager:
                 if any(kw in text_lower for kw in cap.keywords):
                     log.debug("agent_manager.route_matched", agent=agent.info.id, trigger=text[:20])
                     return agent
-        
+
         return self.default_agent if self.default_agent else list(self.agents.values())[0]

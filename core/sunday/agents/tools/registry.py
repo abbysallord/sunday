@@ -2,7 +2,6 @@
 
 import inspect
 from collections.abc import Callable
-from typing import Any
 
 from sunday.utils.logging import log
 
@@ -45,7 +44,7 @@ class ToolRegistry:
                 result = await func(**arguments)
             else:
                 result = func(**arguments)
-                
+
             return str(result)
         except Exception as e:
             log.error("tool.execute.failed", tool=name, error=str(e))

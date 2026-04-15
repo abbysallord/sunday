@@ -3,14 +3,14 @@
 from collections.abc import AsyncGenerator
 
 from sunday.agents.base import AgentCapability, AgentInfo, BaseAgent
-from sunday.database.vector import vector_db
 from sunday.core.llm.router import LLMRouter
+from sunday.database.vector import vector_db
 from sunday.models.messages import Message
 
 
 class MemoryAgent(BaseAgent):
     """Answers queries by strictly analyzing extracted historical memories."""
-    
+
     def __init__(self, llm_router: LLMRouter):
         super().__init__(llm_router)
 
@@ -44,27 +44,33 @@ class MemoryAgent(BaseAgent):
     async def process(self, message: Message, context: list[dict[str, str]]) -> str:
         # Search chromadb
         memories = vector_db.query_memories(message.content, limit=5)
-        
+
         if memories:
             memory_block = "\n---\n".join([str(m) for m in memories])
-            injected_context = [{"role": "system", "content": f"Historical Context Retrieved:\n{memory_block}"}]
+            injected_context = [
+                {"role": "system", "content": f"Historical Context Retrieved:\n{memory_block}"}
+            ]
         else:
             injected_context = [{"role": "system", "content": "No historical context found."}]
-            
+
         messages = self._build_messages(message, injected_context + context)
         response = await self.llm.generate(messages=messages)
         return response.content
 
-    async def stream(self, message: Message, context: list[dict[str, str]]) -> AsyncGenerator[str, None]:
+    async def stream(
+        self, message: Message, context: list[dict[str, str]]
+    ) -> AsyncGenerator[str, None]:
         # Search chromadb
         memories = vector_db.query_memories(message.content, limit=5)
-        
+
         if memories:
             memory_block = "\n---\n".join([str(m) for m in memories])
-            injected_context = [{"role": "system", "content": f"Historical Context Retrieved:\n{memory_block}"}]
+            injected_context = [
+                {"role": "system", "content": f"Historical Context Retrieved:\n{memory_block}"}
+            ]
         else:
             injected_context = [{"role": "system", "content": "No historical context found."}]
-            
+
         messages = self._build_messages(message, injected_context + context)
         async for token in self.llm.stream(messages=messages):
             yield token

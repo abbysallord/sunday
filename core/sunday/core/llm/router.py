@@ -88,9 +88,9 @@ class LLMRouter:
 
         # If a specific provider is requested, try it first
         if preferred_provider and preferred_provider in self._providers:
-            providers = [
-                (preferred_provider, self._providers[preferred_provider])
-            ] + [(n, p) for n, p in providers if n != preferred_provider]
+            providers = [(preferred_provider, self._providers[preferred_provider])] + [
+                (n, p) for n, p in providers if n != preferred_provider
+            ]
 
         last_error: Exception | None = None
 
@@ -125,9 +125,7 @@ class LLMRouter:
                     log.warning("llm.provider.failed", provider=name, error=str(e))
                 continue
 
-        raise RuntimeError(
-            f"All LLM providers failed. Last error: {last_error}"
-        )
+        raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
 
     async def stream(
         self,
@@ -143,9 +141,9 @@ class LLMRouter:
         providers = self._get_ordered_providers()
 
         if preferred_provider and preferred_provider in self._providers:
-            providers = [
-                (preferred_provider, self._providers[preferred_provider])
-            ] + [(n, p) for n, p in providers if n != preferred_provider]
+            providers = [(preferred_provider, self._providers[preferred_provider])] + [
+                (n, p) for n, p in providers if n != preferred_provider
+            ]
 
         last_error: Exception | None = None
 
@@ -180,9 +178,7 @@ class LLMRouter:
                     log.warning("llm.stream.failed", provider=name, error=str(e))
                 continue
 
-        raise RuntimeError(
-            f"All LLM providers failed for streaming. Last error: {last_error}"
-        )
+        raise RuntimeError(f"All LLM providers failed for streaming. Last error: {last_error}")
 
     async def health(self) -> dict[str, str]:
         """Check all provider health statuses."""

@@ -48,16 +48,21 @@ class GroqProvider(BaseLLMProvider):
             )
 
             tool_calls = []
-            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+            if (
+                hasattr(response.choices[0].message, "tool_calls")
+                and response.choices[0].message.tool_calls
+            ):
                 for tc in response.choices[0].message.tool_calls:
-                    tool_calls.append({
-                        "id": getattr(tc, "id", ""),
-                        "type": getattr(tc, "type", "function"),
-                        "function": {
-                            "name": getattr(tc.function, "name", ""),
-                            "arguments": getattr(tc.function, "arguments", "")
+                    tool_calls.append(
+                        {
+                            "id": getattr(tc, "id", ""),
+                            "type": getattr(tc, "type", "function"),
+                            "function": {
+                                "name": getattr(tc.function, "name", ""),
+                                "arguments": getattr(tc.function, "arguments", ""),
+                            },
                         }
-                    })
+                    )
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",
@@ -162,16 +167,21 @@ class GoogleProvider(BaseLLMProvider):
             )
 
             tool_calls = []
-            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+            if (
+                hasattr(response.choices[0].message, "tool_calls")
+                and response.choices[0].message.tool_calls
+            ):
                 for tc in response.choices[0].message.tool_calls:
-                    tool_calls.append({
-                        "id": getattr(tc, "id", ""),
-                        "type": getattr(tc, "type", "function"),
-                        "function": {
-                            "name": getattr(tc.function, "name", ""),
-                            "arguments": getattr(tc.function, "arguments", "")
+                    tool_calls.append(
+                        {
+                            "id": getattr(tc, "id", ""),
+                            "type": getattr(tc, "type", "function"),
+                            "function": {
+                                "name": getattr(tc.function, "name", ""),
+                                "arguments": getattr(tc.function, "arguments", ""),
+                            },
                         }
-                    })
+                    )
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",
@@ -276,16 +286,21 @@ class OllamaProvider(BaseLLMProvider):
             )
 
             tool_calls = []
-            if hasattr(response.choices[0].message, "tool_calls") and response.choices[0].message.tool_calls:
+            if (
+                hasattr(response.choices[0].message, "tool_calls")
+                and response.choices[0].message.tool_calls
+            ):
                 for tc in response.choices[0].message.tool_calls:
-                    tool_calls.append({
-                        "id": getattr(tc, "id", ""),
-                        "type": getattr(tc, "type", "function"),
-                        "function": {
-                            "name": getattr(tc.function, "name", ""),
-                            "arguments": getattr(tc.function, "arguments", "")
+                    tool_calls.append(
+                        {
+                            "id": getattr(tc, "id", ""),
+                            "type": getattr(tc, "type", "function"),
+                            "function": {
+                                "name": getattr(tc.function, "name", ""),
+                                "arguments": getattr(tc.function, "arguments", ""),
+                            },
                         }
-                    })
+                    )
 
             return LLMResponse(
                 content=response.choices[0].message.content or "",

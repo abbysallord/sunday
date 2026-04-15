@@ -2,7 +2,6 @@
 
 from sunday.agents.base import AgentCapability, AgentInfo, BaseToolAgent
 from sunday.agents.tools.builtins import register_builtins
-from sunday.core.llm.router import LLMRouter
 
 
 class ToolCallingAgent(BaseToolAgent):
@@ -21,7 +20,25 @@ class ToolCallingAgent(BaseToolAgent):
                 AgentCapability(
                     name="system_tools",
                     description="Mathematical reasoning, python scripts, or evaluating desktop timeframes.",
-                    keywords=["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool", "python", "script", "code"],
+                    keywords=[
+                        "time",
+                        "clock",
+                        "calculate",
+                        "math",
+                        "maths",
+                        "+",
+                        "-",
+                        "*",
+                        "/",
+                        "operating system",
+                        "system info",
+                        "os",
+                        "platform",
+                        "run tool",
+                        "python",
+                        "script",
+                        "code",
+                    ],
                 ),
             ],
             version="0.1.0",

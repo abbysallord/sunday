@@ -1,12 +1,12 @@
 """Builtin minimal system tools to demonstrate baseline integrations."""
 
 import datetime
-import platform
-import os
 import math
+import os
+import platform
 
-from sunday.agents.tools.registry import ToolRegistry
 from sunday.agents.tools.python_repl import execute_python_code
+from sunday.agents.tools.registry import ToolRegistry
 
 
 def get_current_time(timezone: str = "local") -> str:
@@ -50,29 +50,35 @@ def register_builtins(registry: ToolRegistry) -> None:
         parameters={"type": "object", "properties": {}},
         func=get_system_platform,
     )
-    
+
     registry.register(
         name="calculate_math",
         description="Evaluate mathematical expressions. Valid elements: numeric operations (+, -, *, /) and math module functions (sin, cos, sqrt).",
         parameters={
             "type": "object",
             "properties": {
-                "expression": {"type": "string", "description": "The mathematical expression to evaluate"}
+                "expression": {
+                    "type": "string",
+                    "description": "The mathematical expression to evaluate",
+                }
             },
-            "required": ["expression"]
+            "required": ["expression"],
         },
         func=calculate_math,
     )
-    
+
     registry.register(
         name="execute_python_code",
         description="Write and execute raw python script code internally. Use this to explicitly auto-fix algorithms, verify file structures, or debug your own native traces if other tools fail.",
         parameters={
             "type": "object",
             "properties": {
-                "code": {"type": "string", "description": "The block of raw Python code to execute. Variables do not persist across multiple executions."}
+                "code": {
+                    "type": "string",
+                    "description": "The block of raw Python code to execute. Variables do not persist across multiple executions.",
+                }
             },
-            "required": ["code"]
+            "required": ["code"],
         },
         func=execute_python_code,
     )

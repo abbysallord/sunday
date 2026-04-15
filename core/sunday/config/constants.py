@@ -28,4 +28,3 @@ you say so honestly. You are proactive in offering useful suggestions when appro
 # Title generation prompt (used to auto-title conversations)
 TITLE_GENERATION_PROMPT = """Generate a concise title (3-6 words) for a conversation that starts with this message. \
 Return ONLY the title text, no quotes, no punctuation at the end, no extra explanation."""
-

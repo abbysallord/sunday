@@ -1,8 +1,9 @@
 """Search Utilities for reading duckduckgo interfaces natively."""
 
-from duckduckgo_search import DDGS
-from bs4 import BeautifulSoup
 import httpx
+from bs4 import BeautifulSoup
+from duckduckgo_search import DDGS
+
 from sunday.agents.tools.registry import ToolRegistry
 from sunday.utils.logging import log
 
@@ -14,19 +15,21 @@ def search_web(query: str, max_results: int = 5, timelimit: str | None = None) -
         kwargs = {"max_results": max_results}
         if timelimit:
             kwargs["timelimit"] = timelimit
-            
+
         results = DDGS().text(query, **kwargs)
-        
+
         if not results:
             return "No web results found."
-            
+
         output = []
         for r in results:
-            snippet = r.get('body', '')
+            snippet = r.get("body", "")
             if len(snippet) > 400:
                 snippet = snippet[:397] + "..."
-            output.append(f"Title: {r.get('title', 'Unknown')}\nSnippet: {snippet}\nURL: {r.get('href', '')}\n")
-            
+            output.append(
+                f"Title: {r.get('title', 'Unknown')}\nSnippet: {snippet}\nURL: {r.get('href', '')}\n"
+            )
+
         return "\n".join(output)
     except Exception as e:
         log.error("research.search_web.failed", query=query, error=str(e))
@@ -39,25 +42,24 @@ def fetch_webpage(url: str) -> str:
     try:
         with httpx.Client(timeout=10, follow_redirects=True) as client:
             resp = client.get(
-                url, 
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             )
             resp.raise_for_status()
-            
+
             # Simple text conversion via BeautifulSoup
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            
+            soup = BeautifulSoup(resp.text, "html.parser")
+
             # Drop invisible elements mathematically
             for script in soup(["script", "style", "noscript", "header", "footer", "nav"]):
                 script.extract()
-                
-            text = soup.get_text(separator=' ', strip=True)
-            
+
+            text = soup.get_text(separator=" ", strip=True)
+
             # Secure length clipping avoiding LLM token bombs natively
             cutoff = 6000
             if len(text) > cutoff:
                 text = text[:cutoff] + "... [Content Truncated]"
-                
+
             return text
     except Exception as e:
         log.error("research.fetch_webpage.failed", url=url, error=str(e))
@@ -72,11 +74,20 @@ def register_research_tools(registry: ToolRegistry) -> None:
         parameters={
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "The exact search engine query parameters."},
-                "max_results": {"type": "integer", "description": "Total citation results to pull (default 5)."},
-                "timelimit": {"type": "string", "description": "Time limit for recent news. Valid options: 'd' (day), 'w' (week), 'm' (month), 'y' (year). Crucial for up-to-date events."}
+                "query": {
+                    "type": "string",
+                    "description": "The exact search engine query parameters.",
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Total citation results to pull (default 5).",
+                },
+                "timelimit": {
+                    "type": "string",
+                    "description": "Time limit for recent news. Valid options: 'd' (day), 'w' (week), 'm' (month), 'y' (year). Crucial for up-to-date events.",
+                },
             },
-            "required": ["query"]
+            "required": ["query"],
         },
         func=search_web,
     )
@@ -87,9 +98,12 @@ def register_research_tools(registry: ToolRegistry) -> None:
         parameters={
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "The absolute HTTP URL structure to extract from."}
+                "url": {
+                    "type": "string",
+                    "description": "The absolute HTTP URL structure to extract from.",
+                }
             },
-            "required": ["url"]
+            "required": ["url"],
         },
         func=fetch_webpage,
     )

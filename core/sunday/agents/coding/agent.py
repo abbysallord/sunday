@@ -1,7 +1,9 @@
 """The elite Coding Agent capable of reading/writing system codebases physically."""
+
 from sunday.agents.base import AgentCapability, AgentInfo, BaseToolAgent
 from sunday.agents.coding.tools import register_coding_tools
 from sunday.core.llm.router import LLMRouter
+
 
 class CodingAgent(BaseToolAgent):
     """An execution-heavy AI Agent capable of modifying existing project scopes cleanly."""
@@ -24,9 +26,20 @@ class CodingAgent(BaseToolAgent):
                     name="programming_and_shell",
                     description="Ability to construct python code or bash environments globally seamlessly.",
                     keywords=[
-                         "file", "directory", "script", "read file", "write file", "coding",
-                        "bash", "shell", "program", "compile", "pwd", "ls",
-                        "folder", "refactor"
+                        "file",
+                        "directory",
+                        "script",
+                        "read file",
+                        "write file",
+                        "coding",
+                        "bash",
+                        "shell",
+                        "program",
+                        "compile",
+                        "pwd",
+                        "ls",
+                        "folder",
+                        "refactor",
                     ],
                 ),
             ],

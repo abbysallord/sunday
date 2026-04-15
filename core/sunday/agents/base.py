@@ -11,13 +11,12 @@ DESIGN PRINCIPLES:
 4. Agents communicate through the orchestrator, never directly
 """
 
-from abc import ABC, abstractmethod
 import json
+from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 
 from sunday.agents.tools.registry import ToolRegistry
-
 from sunday.core.llm.router import LLMRouter
 from sunday.models.messages import Message
 
@@ -93,7 +92,7 @@ class BaseAgent(ABC):
 
 class BaseToolAgent(BaseAgent, ABC):
     """Abstract agent handling extensive tool looping implicitly utilizing internal registries dynamically.
-    
+
     Contributors mapping new tooling functionality should ONLY inherit from this hook without rewriting LLM boundaries!
     """
 
@@ -111,15 +110,15 @@ class BaseToolAgent(BaseAgent, ABC):
     async def process(self, message: Message, context: list[dict[str, str]]) -> str:
         messages = self._build_messages(message, context)
         schemas = self.registry.get_tool_schemas()
-        
+
         for _ in range(self._max_loops):
             response = await self.llm.generate(messages=messages, tools=schemas)
-            
+
             assistant_msg = {"role": "assistant", "content": response.content}
             if response.tool_calls:
                 assistant_msg["tool_calls"] = response.tool_calls
             messages.append(assistant_msg)
-            
+
             if not response.tool_calls:
                 return response.content or "No findings located."
 
@@ -129,20 +128,24 @@ class BaseToolAgent(BaseAgent, ABC):
                     args = json.loads(tc.get("function", {}).get("arguments", "{}"))
                 except json.JSONDecodeError:
                     args = {}
-                
+
                 result_str = await self.registry.execute(func_name, args)
-                messages.append({
-                    "role": "tool",
-                    "name": func_name,
-                    "content": result_str,
-                    "tool_call_id": tc.get("id", ""),
-                })
-        
+                messages.append(
+                    {
+                        "role": "tool",
+                        "name": func_name,
+                        "content": result_str,
+                        "tool_call_id": tc.get("id", ""),
+                    }
+                )
+
         return f"Exceeded maximum internal tool boundaries ({self._max_loops} loops)."
 
-    async def stream(self, message: Message, context: list[dict[str, str]]) -> AsyncGenerator[str, None]:
+    async def stream(
+        self, message: Message, context: list[dict[str, str]]
+    ) -> AsyncGenerator[str, None]:
         """Wrap synchronous hooks over synthetic token yielding pipelines actively."""
         final_text = await self.process(message, context)
         chunk_size = 8
         for i in range(0, len(final_text), chunk_size):
-            yield final_text[i:i + chunk_size]
+            yield final_text[i : i + chunk_size]
