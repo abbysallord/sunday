@@ -8,8 +8,11 @@ The Orchestrator (`AgentManager`) will automatically find, instantiate, and rout
 
 ### 1. Create your Folder
 Create a folder named identically to your agent concept inside `core/sunday/agents/`.
+**CRITICAL**: You must include an `__init__.py` file so the agent auto-discovery engine can read your folder!
+
 ```bash
 mkdir core/sunday/agents/coding
+touch core/sunday/agents/coding/__init__.py
 touch core/sunday/agents/coding/agent.py
 ```
 

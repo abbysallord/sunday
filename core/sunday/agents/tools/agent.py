@@ -21,7 +21,7 @@ class ToolCallingAgent(BaseToolAgent):
                 AgentCapability(
                     name="system_tools",
                     description="Mathematical reasoning, python scripts, or evaluating desktop timeframes.",
-                    keywords=["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool"],
+                    keywords=["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool", "python", "script", "code"],
                 ),
             ],
             version="0.1.0",
