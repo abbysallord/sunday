@@ -12,12 +12,9 @@
 - Commits: Conventional commits (`feat:`, `fix:`, `docs:`, etc.)
 
 ## Adding a New Agent
-1. Create `core/sunday/agents/your_agent/`
-2. Extend `BaseAgent` in `agent.py`
-3. Define prompts in `prompts.py`
-4. Register in the orchestrator
-5. Add tests in `core/tests/test_agents/`
-6. Document in `docs/agents/`
+SUNDAY utilizes a dynamic **AgentManager** that auto-discovers and implicitly hot-plugs custom logic bounds natively. You DO NOT need to structurally modify core routers to build logic capabilities!
+
+Please refer directly to the dedicated guide: [CONTRIBUTING_AGENTS.md](CONTRIBUTING_AGENTS.md) for the explicit 2-step tutorial on building and releasing your Agent framework into the local ecosystem.
 
 ## Pull Requests
 - One feature per PR

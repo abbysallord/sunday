@@ -7,16 +7,26 @@ from sunday.agents.tools.registry import ToolRegistry
 from sunday.utils.logging import log
 
 
-def search_web(query: str, max_results: int = 5) -> str:
+def search_web(query: str, max_results: int = 5, timelimit: str | None = None) -> str:
     """Fetch live HTML URLs and basic indexing context from DuckDuckGo."""
-    log.info("research.search_web", query=query, max_results=max_results)
+    log.info("research.search_web", query=query, max_results=max_results, timelimit=timelimit)
     try:
-        results = DDGS().text(query, max_results=max_results)
+        kwargs = {"max_results": max_results}
+        if timelimit:
+            kwargs["timelimit"] = timelimit
+            
+        results = DDGS().text(query, **kwargs)
         
         if not results:
-            return "No web results found natively."
+            return "No web results found."
             
-        output = [f"Title: {r.get('title', 'Unknown')}\nSnippet: {r.get('body', '')}\nURL: {r.get('href', '')}\n" for r in results]
+        output = []
+        for r in results:
+            snippet = r.get('body', '')
+            if len(snippet) > 400:
+                snippet = snippet[:397] + "..."
+            output.append(f"Title: {r.get('title', 'Unknown')}\nSnippet: {snippet}\nURL: {r.get('href', '')}\n")
+            
         return "\n".join(output)
     except Exception as e:
         log.error("research.search_web.failed", query=query, error=str(e))
@@ -63,7 +73,8 @@ def register_research_tools(registry: ToolRegistry) -> None:
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "The exact search engine query parameters."},
-                "max_results": {"type": "integer", "description": "Total citation results to pull (default 5)."}
+                "max_results": {"type": "integer", "description": "Total citation results to pull (default 5)."},
+                "timelimit": {"type": "string", "description": "Time limit for recent news. Valid options: 'd' (day), 'w' (week), 'm' (month), 'y' (year). Crucial for up-to-date events."}
             },
             "required": ["query"]
         },

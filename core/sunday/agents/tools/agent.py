@@ -1,34 +1,27 @@
-"""Tool Calling Agent — executes physical procedures within the local system bounds."""
-import json
-from collections.abc import AsyncGenerator
+"""The System Tooling Agent handling local desktop executions autonomously."""
 
-from sunday.agents.base import AgentCapability, AgentInfo, BaseAgent
-from sunday.agents.tools.registry import ToolRegistry
+from sunday.agents.base import AgentCapability, AgentInfo, BaseToolAgent
 from sunday.agents.tools.builtins import register_builtins
 from sunday.core.llm.router import LLMRouter
-from sunday.models.messages import Message
-from sunday.utils.logging import log
 
 
-class ToolCallingAgent(BaseAgent):
-    """An agent that supports continuous functional executions dynamically routing API responses."""
+class ToolCallingAgent(BaseToolAgent):
+    """An agent that translates natural language into direct system tool executions natively."""
 
-    def __init__(self, llm_router: LLMRouter):
-        super().__init__(llm_router)
-        self.registry = ToolRegistry()
+    def _register_tools(self) -> None:
         register_builtins(self.registry)
 
     @property
     def info(self) -> AgentInfo:
         return AgentInfo(
-            id="tool_runner",
-            name="Utility Executor",
-            description="Agent specialized in determining logic chains and invoking native machine APIs.",
+            id="tool_agent",
+            name="System Tool Operator",
+            description="Agent that controls isolated logical loops structurally natively.",
             capabilities=[
                 AgentCapability(
-                    name="execution",
-                    description="Ability to run native system tools.",
-                    keywords=["time", "calculate", "system", "run", "do"],
+                    name="system_tools",
+                    description="Mathematical reasoning, python scripts, or evaluating desktop timeframes.",
+                    keywords=["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool"],
                 ),
             ],
             version="0.1.0",
@@ -38,60 +31,7 @@ class ToolCallingAgent(BaseAgent):
     @property
     def system_prompt(self) -> str:
         return (
-            "You are SUNDAY's primary function execution agent. "
-            "You have direct access to system-level tools. "
-            "Evaluate the user's request. If it demands real-time data, calculations, "
-            "or actions that you cannot answer logically from raw memory, execute the provided tools. "
-            "Execute tools cleanly. If multiple tools are needed, use them in sequence."
+            "You are SUNDAY's primary Tool Calling Agent. You possess the explicit ability "
+            "to bridge natural language queries internally into direct physical code executions! "
+            "Use your registered tools immediately to evaluate logic arrays. Return the exact response clearly and precisely to the user."
         )
-
-    async def process(self, message: Message, context: list[dict[str, str]]) -> str:
-        """Fully execute a tool loop and return the final textual response."""
-        messages = self._build_messages(message, context)
-        schemas = self.registry.get_tool_schemas()
-        
-        for _ in range(5):  # Max 5 chained tool calls per message
-            response = await self.llm.generate(messages=messages, tools=schemas)
-            
-            # Append the LLM's raw response to keep the sequence valid
-            # LiteLLM formats this nicely if we include tool_calls directly
-            assistant_msg = {
-                "role": "assistant",
-                "content": response.content,
-            }
-            if response.tool_calls:
-                assistant_msg["tool_calls"] = response.tool_calls
-            messages.append(assistant_msg)
-            
-            if not response.tool_calls:
-                # Exiting early since LLM concluded the function calling phase
-                return response.content
-
-            # Attempt all triggered tool calls sequentially
-            for tc in response.tool_calls:
-                func_name = tc.get("function", {}).get("name", "")
-                try:
-                    args = json.loads(tc.get("function", {}).get("arguments", "{}"))
-                except json.JSONDecodeError:
-                    args = {}
-                
-                # Natively call defined python execution
-                result_str = await self.registry.execute(func_name, args)
-                
-                # Pass back result
-                messages.append({
-                    "role": "tool",
-                    "name": func_name,
-                    "content": result_str,
-                    "tool_call_id": tc.get("id", ""),
-                })
-        
-        return "Executed maximum tool threshold. Stopping execution chain to preserve API limits."
-
-    async def stream(self, message: Message, context: list[dict[str, str]]) -> AsyncGenerator[str, None]:
-        """Handles tool resolution, and streams final text block artificially."""
-        final_text = await self.process(message, context)
-        # Yield the generated text block dynamically to mimic token streaming visually
-        chunk_size = 8
-        for i in range(0, len(final_text), chunk_size):
-            yield final_text[i:i + chunk_size]

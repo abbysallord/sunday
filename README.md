@@ -89,7 +89,9 @@ sunday/
 | Google AI Studio | [aistudio.google.com](https://aistudio.google.com/apikey) | 15 RPM, 1M+ tokens/day |
 
 ## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for general guidelines.
+
+Are you looking to add a new AI Agent to the system? Check out our [Agent Developer Guide](CONTRIBUTING_AGENTS.md) to see how you can hot-plug new capabilities with zero LLM configuration!
 
 ## License
 MIT — See [LICENSE](LICENSE) for details.

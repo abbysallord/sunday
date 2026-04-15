@@ -17,10 +17,7 @@ import contextlib
 import json
 from fastapi import WebSocket, WebSocketDisconnect
 
-from sunday.agents.secretary.agent import SecretaryAgent
-from sunday.agents.tools.agent import ToolCallingAgent
-from sunday.agents.memory.agent import MemoryAgent
-from sunday.agents.research.agent import ResearchAgent
+from sunday.agents.manager import AgentManager
 from sunday.config.constants import (
     MAX_CONTEXT_MESSAGES,
     TITLE_GENERATION_PROMPT,
@@ -43,27 +40,11 @@ from sunday.models.messages import Conversation, Message, MessageSource, Role
 from sunday.utils.audio import decode_audio
 from sunday.utils.logging import log
 
-_secretary = SecretaryAgent(llm_router=llm_router)
-_tool_agent = ToolCallingAgent(llm_router=llm_router)
-_memory_agent = MemoryAgent(llm_router=llm_router)
-_research_agent = ResearchAgent(llm_router=llm_router)
+agent_manager = AgentManager(llm_router=llm_router)
 
 def _determine_agent(text: str):
-    """Use basic heuristics to select specialized agents."""
-    text_lower = text.lower()
-    tool_keywords = ["time", "clock", "calculate", "math", "maths", "+", "-", "*", "/", "operating system", "system info", "os", "platform", "run tool"]
-    mem_keywords = ["remember", "past", "history", "previously", "last time", "did i say"]
-    rs_keywords = ["search", "who is", "news", "google", "website", "look up", "internet", "what is happening", "fetch"]
-    
-    if any(k in text_lower for k in rs_keywords):
-        return _research_agent
-    if any(k in text_lower for k in tool_keywords):
-        # Additional safety to avoid matching 'cost' or other generic words
-        # but string search is rough.
-        return _tool_agent
-    if any(k in text_lower for k in mem_keywords):
-        return _memory_agent
-    return _secretary
+    """Use heuristic agent logic mapping strictly utilizing central registry boundaries natively."""
+    return agent_manager.determine_agent(text)
 
 
 async def _send_json(ws: WebSocket, msg_type: str, data: dict) -> None:
