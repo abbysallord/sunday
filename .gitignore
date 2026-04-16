@@ -54,8 +54,8 @@ Thumbs.db
 *.bak
 *.tmp
 
-# Models (downloaded at runtime)
-models/
+# Models (downloaded at runtime — root-level only, not sunday/models/)
+/models/
 *.bin
 *.onnx
 *.onnx.json
