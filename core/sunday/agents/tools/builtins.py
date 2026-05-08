@@ -21,11 +21,42 @@ def get_system_platform() -> str:
 
 
 def calculate_math(expression: str) -> str:
-    """Safely calculate simple numeric equations."""
+    """Safely calculate simple numeric equations using ast.literal_eval-safe parsing."""
+    import ast
+    import operator
+
+    _OPS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.USub: operator.neg,
+        ast.UAdd: operator.pos,
+    }
+    _MATH_FUNCS = {
+        name: getattr(math, name)
+        for name in dir(math)
+        if not name.startswith("_") and callable(getattr(math, name))
+    }
+
+    def _eval(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_eval(node.left), _eval(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _OPS:
+            return _OPS[type(node.op)](_eval(node.operand))
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in _MATH_FUNCS:
+                args = [_eval(a) for a in node.args]
+                return _MATH_FUNCS[node.func.id](*args)
+        raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+
     try:
-        # Extremely basic calculation restrictor to native math
-        allowed_names = {k: v for k, v in math.__dict__.items() if not k.startswith("__")}
-        return str(eval(expression, {"__builtins__": None}, allowed_names))
+        tree = ast.parse(expression, mode="eval")
+        result = _eval(tree.body)
+        return str(result)
     except Exception as e:
         return f"Calculation failed: {str(e)}"
 
