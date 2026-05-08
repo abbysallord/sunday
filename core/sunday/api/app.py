@@ -38,7 +38,10 @@ def create_app() -> FastAPI:
     app.add_middleware(ErrorHandlerMiddleware)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Tauri app connects from localhost
+        # Wildcard is intentional: SUNDAY is a local-only desktop app (Tauri).
+        # When auth is added, restrict this to the Tauri origin.
+        # TODO: tighten origins when authentication is implemented.
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

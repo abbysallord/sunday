@@ -5,9 +5,10 @@ This handles:
 2. Voice input (audio chunks → STT → LLM → TTS → audio response)
 3. Status updates (typing indicators, processing states)
 4. Smart title generation (LLM-generated conversation titles)
+5. TTS for text chat (opt-in read-aloud for typed messages)
 
 Protocol:
-Client sends JSON: {"type": "chat"|"voice_audio"|"voice_end", "data": {...}}
+Client sends JSON: {"type": "chat"|"voice_audio"|"voice_end"|"tts_toggle", "data": {...}}
 Server sends JSON: {"type": "chat_stream"|"chat_end"|"tts_audio"|"error"|"title_update"|"provider_info", "data": {...}}
 """
 
@@ -30,6 +31,7 @@ from sunday.config.constants import (
     WS_MSG_TITLE_UPDATE,
     WS_MSG_TTS_AUDIO,
     WS_MSG_TTS_END,
+    WS_MSG_TTS_TOGGLE,
     WS_MSG_VOICE_AUDIO,
     WS_MSG_VOICE_END,
 )
@@ -45,7 +47,7 @@ agent_manager = AgentManager(llm_router=llm_router)
 
 
 def _determine_agent(text: str):
-    """Use heuristic agent logic mapping strictly utilizing central registry boundaries natively."""
+    """Route to the best agent based on the user's message."""
     return agent_manager.determine_agent(text)
 
 
@@ -102,7 +104,39 @@ async def _generate_title(ws: WebSocket, conversation_id: str, user_text: str) -
             )
 
 
-async def _handle_chat(ws: WebSocket, data: dict) -> None:
+def _store_memory(msg_id: str, content: str, conversation_id: str, role: str) -> None:
+    """Store a message in ChromaDB (runs in a thread)."""
+    try:
+        vector_db.add_memory(
+            msg_id,
+            content,
+            {"conversation_id": conversation_id, "role": role},
+        )
+    except Exception as e:
+        log.warning("memory.store_failed", id=msg_id, error=str(e))
+
+
+async def _synthesize_tts(ws: WebSocket, text: str) -> None:
+    """Synthesize text to speech and send audio chunks to the client."""
+    try:
+        sentences = tts.split_into_sentences(text)
+        for sentence in sentences:
+            audio_data = await asyncio.to_thread(tts.synthesize, sentence)
+            if audio_data:
+                await _send_json(
+                    ws,
+                    WS_MSG_TTS_AUDIO,
+                    {
+                        "audio": base64.b64encode(audio_data).decode("ascii"),
+                        "format": "wav",
+                    },
+                )
+        await _send_json(ws, WS_MSG_TTS_END, {})
+    except Exception as e:
+        log.warning("tts.synthesis_failed", error=str(e))
+
+
+async def _handle_chat(ws: WebSocket, data: dict, tts_enabled: bool = False) -> None:
     """Handle a text chat message with streaming response."""
     text = data.get("message", "").strip()
     conversation_id = data.get("conversation_id")
@@ -126,13 +160,10 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
     conversation.add_message(user_msg)
     await db.save_message(conversation.id, user_msg)
 
-    # Store passive context memory
+    # Store memory in background
     asyncio.create_task(
         asyncio.to_thread(
-            vector_db.add_memory,
-            user_msg.id,
-            f"User: {user_msg.content}",
-            {"conversation_id": conversation.id},
+            _store_memory, user_msg.id, f"User: {text}", conversation.id, "user"
         )
     )
 
@@ -170,13 +201,14 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
         conversation.add_message(assistant_msg)
         await db.save_message(conversation.id, assistant_msg)
 
-        # Store passive context memory
+        # Store memory in background
         asyncio.create_task(
             asyncio.to_thread(
-                vector_db.add_memory,
+                _store_memory,
                 assistant_msg.id,
-                f"SUNDAY: {assistant_msg.content}",
-                {"conversation_id": conversation.id},
+                f"SUNDAY: {response_text}",
+                conversation.id,
+                "assistant",
             )
         )
 
@@ -195,13 +227,25 @@ async def _handle_chat(ws: WebSocket, data: dict) -> None:
             },
         )
 
+        # TTS for text chat (if enabled by the user)
+        if tts_enabled and response_text.strip():
+            asyncio.create_task(_synthesize_tts(ws, response_text))
+
     except Exception as e:
         error_msg = str(e)
         log.error("ws.chat.failed", error=error_msg)
 
-        # Provide user-friendly error messages
+        # Provide user-friendly error messages with details
         if "all llm providers failed" in error_msg.lower():
+            # Extract the details bracket if present
+            details = ""
+            if "[" in error_msg and "]" in error_msg:
+                details = error_msg[error_msg.index("[") + 1 : error_msg.rindex("]")]
             user_error = (
+                "All AI providers are currently unavailable. "
+                f"Details: {details}. "
+                "Please try again in a moment."
+            ) if details else (
                 "All AI providers are currently unavailable. "
                 "This may be due to rate limits or connectivity issues. "
                 "Please try again in a moment."
@@ -266,13 +310,14 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
     conversation.add_message(user_msg)
     await db.save_message(conversation.id, user_msg)
 
-    # Store passive context memory
+    # Store memory in background
     asyncio.create_task(
         asyncio.to_thread(
-            vector_db.add_memory,
+            _store_memory,
             user_msg.id,
-            f"User ({user_msg.source}): {user_msg.content}",
-            {"conversation_id": conversation.id},
+            f"User (voice): {transcribed_text}",
+            conversation.id,
+            "user",
         )
     )
 
@@ -342,13 +387,14 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
         conversation.add_message(assistant_msg)
         await db.save_message(conversation.id, assistant_msg)
 
-        # Store passive context memory
+        # Store memory in background
         asyncio.create_task(
             asyncio.to_thread(
-                vector_db.add_memory,
+                _store_memory,
                 assistant_msg.id,
-                f"SUNDAY: {assistant_msg.content}",
-                {"conversation_id": conversation.id},
+                f"SUNDAY: {response_text}",
+                conversation.id,
+                "assistant",
             )
         )
 
@@ -378,6 +424,7 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     log.info("ws.connected")
 
     audio_buffer: list[bytes] = []
+    tts_enabled: bool = False  # TTS for text chat, off by default
 
     try:
         while True:
@@ -393,7 +440,15 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             data = msg.get("data", {})
 
             if msg_type == WS_MSG_CHAT:
-                await _handle_chat(ws, data)
+                # Check if the message includes a tts_enabled override
+                msg_tts = data.get("tts_enabled")
+                if msg_tts is not None:
+                    tts_enabled = bool(msg_tts)
+                await _handle_chat(ws, data, tts_enabled=tts_enabled)
+
+            elif msg_type == WS_MSG_TTS_TOGGLE:
+                tts_enabled = bool(data.get("enabled", False))
+                log.info("ws.tts_toggle", enabled=tts_enabled)
 
             elif msg_type == WS_MSG_VOICE_AUDIO:
                 # Accumulate audio chunks
