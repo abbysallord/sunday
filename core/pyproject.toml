@@ -38,8 +38,11 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "structlog>=24.4.0",
     # External Integrations (Research/Tools)
-    "duckduckgo-search>=6.1.7",
+    "ddgs>=9.0.0",
     "beautifulsoup4>=4.12.0",
+
+    # CLI
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +58,7 @@ dev = [
 
 [project.scripts]
 sunday = "sunday.main:main"
+sunday-chat = "sunday.cli:main"
 
 [tool.ruff]
 target-version = "py311"
