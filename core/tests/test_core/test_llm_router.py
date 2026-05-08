@@ -28,16 +28,18 @@ class TestLLMRouter:
 
     def test_rate_limited_provider_is_deprioritized(self):
         """A provider marked RATE_LIMITED should move to the end of the ordered list."""
+        import time
         router = LLMRouter()
         # Mark the first provider as rate-limited
         first = router._provider_order[0]
         router._status_cache[first] = ProviderStatus.RATE_LIMITED
+        router._status_timestamps[first] = time.monotonic()  # Set recent timestamp
 
         ordered = router._get_ordered_providers()
         ordered_names = [name for name, _ in ordered]
 
-        # The rate-limited provider should not be first
-        assert ordered_names[-1] == first or ordered_names[0] != first
+        # The rate-limited provider should be at the end
+        assert ordered_names[-1] == first
 
     @pytest.mark.asyncio
     async def test_all_providers_failed_raises(self):
