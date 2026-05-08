@@ -3,50 +3,58 @@
 # 🌅 SUNDAY
 **Simply Unique Natural Daily Assistant for YOU**
 
-A modular, voice-enabled AI assistant with a beautiful desktop interface.
+A modular, voice-enabled AI assistant with an autonomous research engine and a beautiful desktop interface.
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Python 3.11+](https://img.shields.io/badge/Python-3.11+-blue.svg)
+![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue.svg)
 
 </div>
 
 ## Features
-- 🎨 **Beautiful Desktop GUI** — Dark-themed, modern chat interface with streaming responses
-- 🎤 **Voice Interaction** — Speak to SUNDAY, she speaks back (STT + TTS + VAD)
-- 🧠 **Multi-LLM Intelligence** — Smart router with automatic failover (Groq → Gemini → Ollama)
-- 🏷️ **Smart Titles** — Conversations auto-titled by LLM (not just first 50 chars)
-- ⌨️ **Keyboard Shortcuts** — `/` focus, `Ctrl+Shift+N` new chat, `Esc` stop
-- 🔌 **Modular Agents** — Extensible agent system (25+ planned, Secretary Agent active)
-- 💾 **Persistent Memory** — SQLite-backed conversation storage with full CRUD
-- 🆓 **Zero Cost** — Runs entirely on free-tier services ($0/month)
-- 🐧 **Linux-First** — Built on Fedora 43, expandable to all platforms
+- 🎨 **Beautiful Desktop GUI** — Dark-themed, modern chat interface with streaming responses.
+- 🎤 **Voice Interaction** — Speak to SUNDAY, she speaks back (STT + TTS + VAD).
+- 🧠 **Multi-LLM Intelligence** — Smart router with automatic failover (Groq → Gemini → Ollama).
+- 🔍 **Deep Research Agent** — Autonomous, multi-stage research engine that plans, executes, and synthesizes reports in the background.
+- 💻 **Coding & System Control** — Full file system access and shell execution capabilities.
+- 💾 **Persistent Semantic Memory** — Cross-conversation memory via ChromaDB vector store.
+- ⌨️ **CLI Mode** — Full interactive REPL for power users who prefer the terminal.
+- 🆓 **Zero Cost** — Runs entirely on free-tier services ($0/month).
+- 🐧 **Linux-First** — Optimized for high performance on Linux systems.
 
 ## Quick Start
+
+### 1. Environment Setup
 ```bash
-git clone https://github.com/YOUR_USERNAME/sunday.git
+git clone https://github.com/abbysallord/sunday.git
 cd sunday
+cp .env.example .env    # Add your API keys (Groq + Google AI Studio)
+```
 
-# Environment
-cp .env.example .env    # Add your free API keys (Groq + Google AI Studio)
-
-# Backend
+### 2. Run the Backend
+```bash
 cd core
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
+python -m sunday.main
+```
 
-# Frontend
-cd ../gui
+### 3. Run the GUI
+```bash
+# In a new terminal
+cd gui
 npm install
-
-# Run (two terminals)
-# Terminal 1: Backend
-cd core && source .venv/bin/activate && uvicorn sunday.main:app --reload
-
-# Terminal 2: Frontend
-cd gui && npx vite
+npm run dev
 # Open http://localhost:1420
+```
+
+### 4. Run the CLI (Optional)
+```bash
+# In a new terminal
+cd core
+source .venv/bin/activate
+python -m sunday.cli
 ```
 
 ## Architecture
@@ -54,18 +62,13 @@ cd gui && npx vite
 sunday/
 ├── core/       # FastAPI Python backend (the brain)
 │   └── sunday/
-│       ├── agents/     # Modular agent system
+│       ├── agents/     # Modular autonomous agent system
 │       ├── api/        # REST + WebSocket endpoints
-│       ├── core/       # LLM router, voice pipeline
-│       ├── database/   # SQLite async engine
+│       ├── core/       # LLM router, voice pipeline, job manager
+│       ├── database/   # SQLite async engine + ChromaDB vector store
 │       └── config/     # Pydantic settings
 ├── gui/        # React + TypeScript frontend
-│   └── src/
-│       ├── components/ # Chat, Sidebar, Voice UI
-│       ├── stores/     # Zustand state management
-│       ├── services/   # WebSocket + REST clients
-│       └── hooks/      # Keyboard shortcuts, etc.
-├── docs/       # Documentation, HANDOFF.md
+├── docs/       # Documentation, ROADMAP.md, HANDOFF.md
 └── scripts/    # Development utilities
 ```
 
@@ -73,25 +76,22 @@ sunday/
 
 | Component | Technology |
 |-----------|------------|
-| Desktop   | Tauri v2 + React 18 + TypeScript |
-| Styling   | Tailwind CSS (custom dark theme) |
-| Backend   | FastAPI + Python 3.11+ |
-| LLMs      | Groq (Llama 3.3 70B) + Gemini 2.0 Flash + Ollama |
+| Frontend  | React 18 + TypeScript + Zustand + Lucide |
+| Backend   | FastAPI + Python 3.12+ |
+| LLMs      | Groq (Llama 3) + Gemini 1.5/2.0 + Ollama (Qwen) |
 | Voice     | Faster-Whisper (STT) + Piper TTS + Silero VAD |
-| Database  | SQLite (aiosqlite) + ChromaDB (planned) |
-| State     | Zustand |
-| Logging   | structlog + Rich |
+| Memory    | ChromaDB (Vector) + SQLite (Relational) |
+| Tooling   | Vite + Ruff + Tailwind CSS |
 
 ## API Keys (Free)
 | Provider | Get Key | Free Tier |
 |----------|---------|-----------|
-| Groq     | [console.groq.com](https://console.groq.com/keys) | 30 RPM, 14,400 req/day |
-| Google AI Studio | [aistudio.google.com](https://aistudio.google.com/apikey) | 15 RPM, 1M+ tokens/day |
+| Groq     | [console.groq.com](https://console.groq.com/keys) | High speed, generous rate limits |
+| Google AI Studio | [aistudio.google.com](https://aistudio.google.com/apikey) | Large context, fallback provider |
+| Ollama   | [ollama.com](https://ollama.com) | 100% Offline fallback (Llama/Qwen) |
 
 ## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md) for general guidelines.
-
-Are you looking to add a new AI Agent to the system? Check out our [Agent Developer Guide](CONTRIBUTING_AGENTS.md) to see how you can hot-plug new capabilities with zero LLM configuration!
+See [CONTRIBUTING.md](CONTRIBUTING.md) for general guidelines. For agent development, see [CONTRIBUTING_AGENTS.md](CONTRIBUTING_AGENTS.md).
 
 ## License
 MIT — See [LICENSE](LICENSE) for details.
