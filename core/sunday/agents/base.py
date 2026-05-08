@@ -11,6 +11,7 @@ DESIGN PRINCIPLES:
 4. Agents communicate through the orchestrator, never directly
 """
 
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -91,9 +92,11 @@ class BaseAgent(ABC):
 
 
 class BaseToolAgent(BaseAgent, ABC):
-    """Abstract agent handling extensive tool looping implicitly utilizing internal registries dynamically.
+    """Base class for agents that use tools.
 
-    Contributors mapping new tooling functionality should ONLY inherit from this hook without rewriting LLM boundaries!
+    Tool-calling loop runs to completion first (unavoidable), then the final
+    LLM synthesis streams token-by-token. Status tokens are emitted during
+    tool execution so the user sees progress immediately.
     """
 
     def __init__(self, llm_router: LLMRouter):
@@ -104,17 +107,30 @@ class BaseToolAgent(BaseAgent, ABC):
 
     @abstractmethod
     def _register_tools(self) -> None:
-        """Register specific module capabilities seamlessly mapping onto Litellm interfaces here."""
         ...
 
+    # Human-readable labels for tool status tokens shown during streaming
+    _TOOL_STATUS_LABELS: dict[str, str] = {
+        "search_web": "🔍 Searching the web",
+        "fetch_webpage": "🌐 Reading page",
+        "list_directory": "📁 Listing directory",
+        "read_file": "📄 Reading file",
+        "write_file": "✏️ Writing file",
+        "run_shell": "⚙️ Running command",
+        "execute_python_code": "🐍 Executing code",
+        "get_current_time": "🕐 Checking time",
+        "calculate_math": "🔢 Calculating",
+    }
+
     async def process(self, message: Message, context: list[dict[str, str]]) -> str:
+        """Run tool loop to completion and return final text."""
         messages = self._build_messages(message, context)
         schemas = self.registry.get_tool_schemas()
 
         for _ in range(self._max_loops):
             response = await self.llm.generate(messages=messages, tools=schemas)
 
-            assistant_msg = {"role": "assistant", "content": response.content}
+            assistant_msg: dict = {"role": "assistant", "content": response.content}
             if response.tool_calls:
                 assistant_msg["tool_calls"] = response.tool_calls
             messages.append(assistant_msg)
@@ -139,13 +155,76 @@ class BaseToolAgent(BaseAgent, ABC):
                     }
                 )
 
-        return f"Exceeded maximum internal tool boundaries ({self._max_loops} loops)."
+        return f"Reached maximum tool loop limit ({self._max_loops})."
 
     async def stream(
         self, message: Message, context: list[dict[str, str]]
     ) -> AsyncGenerator[str, None]:
-        """Wrap synchronous hooks over synthetic token yielding pipelines actively."""
-        final_text = await self.process(message, context)
-        chunk_size = 8
-        for i in range(0, len(final_text), chunk_size):
-            yield final_text[i : i + chunk_size]
+        """Stream with real token streaming for the final synthesis.
+
+        Phase 1: Tool-calling loop — emits status tokens so the user sees progress.
+        Phase 2: Final LLM synthesis — streams token-by-token via self.llm.stream().
+        """
+        messages = self._build_messages(message, context)
+        schemas = self.registry.get_tool_schemas()
+
+        for _loop_idx in range(self._max_loops):
+            try:
+                response = await asyncio.wait_for(
+                    self.llm.generate(messages=messages, tools=schemas),
+                    timeout=60.0,
+                )
+            except TimeoutError:
+                yield "\n⚠️ Tool call timed out. Please try again."
+                return
+
+            assistant_msg: dict = {"role": "assistant", "content": response.content}
+            if response.tool_calls:
+                assistant_msg["tool_calls"] = response.tool_calls
+            messages.append(assistant_msg)
+
+            if not response.tool_calls:
+                # No more tool calls — we have the final answer
+                if response.content:
+                    # Stream the final answer token-by-token for a better UX
+                    # Build messages WITHOUT the last assistant response so the LLM regenerates it
+                    try:
+                        async for token in self.llm.stream(messages=messages[:-1]):
+                            yield token
+                    except Exception:
+                        # Fallback: just yield the content we already have
+                        yield response.content
+                else:
+                    yield "I completed the tool operations but have no additional summary."
+                return
+
+            # Emit status tokens for each tool call before executing
+            for tc in response.tool_calls:
+                func_name = tc.get("function", {}).get("name", "")
+                label = self._TOOL_STATUS_LABELS.get(func_name, f"🔧 Using {func_name}")
+                yield f"\n`{label}...`\n"
+
+                try:
+                    args = json.loads(tc.get("function", {}).get("arguments", "{}"))
+                except json.JSONDecodeError:
+                    args = {}
+
+                try:
+                    result_str = await asyncio.wait_for(
+                        self.registry.execute(func_name, args),
+                        timeout=45.0,
+                    )
+                except TimeoutError:
+                    result_str = f"Error: Tool '{func_name}' timed out after 45 seconds."
+
+                messages.append(
+                    {
+                        "role": "tool",
+                        "name": func_name,
+                        "content": result_str,
+                        "tool_call_id": tc.get("id", ""),
+                    }
+                )
+
+        yield f"\nReached maximum tool loop limit ({self._max_loops})."
+
