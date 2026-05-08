@@ -17,6 +17,7 @@ WS_MSG_ERROR = "error"
 WS_MSG_STATUS = "status"
 WS_MSG_TITLE_UPDATE = "title_update"
 WS_MSG_PROVIDER_INFO = "provider_info"
+WS_MSG_TTS_TOGGLE = "tts_toggle"
 
 # Conversation
 MAX_CONTEXT_MESSAGES = 50  # Max messages sent to LLM for context

@@ -4,12 +4,16 @@ Handles failover, rate limiting, and provider health tracking.
 This is the ONLY thing the rest of the app talks to for LLM access.
 """
 
+import time
 from collections.abc import AsyncGenerator
 
 from sunday.config.settings import settings
 from sunday.core.llm.base import BaseLLMProvider, LLMResponse, ProviderStatus
 from sunday.core.llm.providers import GoogleProvider, GroqProvider, OllamaProvider
 from sunday.utils.logging import log
+
+# How long to avoid a rate-limited provider before trying it again (seconds)
+_RATE_LIMIT_COOLDOWN = 60
 
 
 class LLMRouter:
@@ -19,6 +23,7 @@ class LLMRouter:
         self._providers: dict[str, BaseLLMProvider] = {}
         self._provider_order: list[str] = []
         self._status_cache: dict[str, ProviderStatus] = {}
+        self._status_timestamps: dict[str, float] = {}  # When status was last set
         self._initialize_providers()
 
     def _initialize_providers(self) -> None:
@@ -57,21 +62,46 @@ class LLMRouter:
 
         log.info("llm.router.ready", order=self._provider_order)
 
+    def _set_status(self, name: str, status: ProviderStatus) -> None:
+        """Update provider status with timestamp for TTL tracking."""
+        self._status_cache[name] = status
+        self._status_timestamps[name] = time.monotonic()
+
+    def _is_provider_available(self, name: str) -> bool:
+        """Check if a provider should be tried (respects cooldown TTL)."""
+        cached_status = self._status_cache.get(name)
+
+        if cached_status not in (ProviderStatus.RATE_LIMITED, ProviderStatus.ERROR):
+            return True
+
+        # Check if cooldown has expired — if so, give the provider another chance
+        last_set = self._status_timestamps.get(name, 0)
+        elapsed = time.monotonic() - last_set
+        if elapsed >= _RATE_LIMIT_COOLDOWN:
+            log.info(
+                "llm.provider.cooldown_expired",
+                provider=name,
+                elapsed_s=round(elapsed, 1),
+            )
+            self._status_cache[name] = ProviderStatus.AVAILABLE
+            return True
+
+        return False
+
     def _get_ordered_providers(self) -> list[tuple[str, BaseLLMProvider]]:
-        """Get providers in priority order, deprioritizing known-bad ones."""
+        """Get providers in priority order, skipping cooldown-blocked ones."""
         available = []
-        degraded = []
+        cooldown = []
 
         for name in self._provider_order:
             provider = self._providers[name]
-            cached_status = self._status_cache.get(name)
-
-            if cached_status in (ProviderStatus.RATE_LIMITED, ProviderStatus.ERROR):
-                degraded.append((name, provider))
-            else:
+            if self._is_provider_available(name):
                 available.append((name, provider))
+            else:
+                cooldown.append((name, provider))
 
-        return available + degraded
+        # Include cooldown providers at the end as last resort
+        return available + cooldown
 
     async def generate(
         self,
@@ -92,7 +122,7 @@ class LLMRouter:
                 (n, p) for n, p in providers if n != preferred_provider
             ]
 
-        last_error: Exception | None = None
+        failure_details: list[str] = []
 
         for name, provider in providers:
             try:
@@ -105,7 +135,7 @@ class LLMRouter:
                     tools=tools,
                 )
                 # Success — mark provider as healthy
-                self._status_cache[name] = ProviderStatus.AVAILABLE
+                self._set_status(name, ProviderStatus.AVAILABLE)
                 log.info(
                     "llm.generate.success",
                     provider=name,
@@ -115,17 +145,25 @@ class LLMRouter:
                 return response
 
             except Exception as e:
-                last_error = e
                 error_str = str(e).lower()
-                if "rate" in error_str or "429" in error_str:
-                    self._status_cache[name] = ProviderStatus.RATE_LIMITED
+                reason = str(e)[:150]
+
+                if "rate" in error_str or "429" in error_str or "quota" in error_str:
+                    self._set_status(name, ProviderStatus.RATE_LIMITED)
+                    failure_details.append(f"{name}: rate-limited")
                     log.warning("llm.rate_limited", provider=name)
+                elif "not found" in error_str:
+                    self._set_status(name, ProviderStatus.ERROR)
+                    failure_details.append(f"{name}: model not found")
+                    log.warning("llm.provider.model_not_found", provider=name, error=reason)
                 else:
-                    self._status_cache[name] = ProviderStatus.ERROR
-                    log.warning("llm.provider.failed", provider=name, error=str(e))
+                    self._set_status(name, ProviderStatus.ERROR)
+                    failure_details.append(f"{name}: {reason}")
+                    log.warning("llm.provider.failed", provider=name, error=reason)
                 continue
 
-        raise RuntimeError(f"All LLM providers failed. Last error: {last_error}")
+        details = "; ".join(failure_details)
+        raise RuntimeError(f"All LLM providers failed. Details: [{details}]")
 
     async def stream(
         self,
@@ -145,7 +183,7 @@ class LLMRouter:
                 (n, p) for n, p in providers if n != preferred_provider
             ]
 
-        last_error: Exception | None = None
+        failure_details: list[str] = []
 
         for name, provider in providers:
             try:
@@ -163,29 +201,39 @@ class LLMRouter:
                     yield token
 
                 # If we got here, streaming succeeded
-                self._status_cache[name] = ProviderStatus.AVAILABLE
+                self._set_status(name, ProviderStatus.AVAILABLE)
                 log.info("llm.stream.success", provider=name, tokens=token_count)
                 return
 
             except Exception as e:
-                last_error = e
                 error_str = str(e).lower()
-                if "rate" in error_str or "429" in error_str:
-                    self._status_cache[name] = ProviderStatus.RATE_LIMITED
+                reason = str(e)[:150]
+
+                if "rate" in error_str or "429" in error_str or "quota" in error_str:
+                    self._set_status(name, ProviderStatus.RATE_LIMITED)
+                    failure_details.append(f"{name}: rate-limited")
                     log.warning("llm.stream.rate_limited", provider=name)
+                elif "not found" in error_str:
+                    self._set_status(name, ProviderStatus.ERROR)
+                    failure_details.append(f"{name}: model not found")
+                    log.warning("llm.stream.model_not_found", provider=name, error=reason)
                 else:
-                    self._status_cache[name] = ProviderStatus.ERROR
-                    log.warning("llm.stream.failed", provider=name, error=str(e))
+                    self._set_status(name, ProviderStatus.ERROR)
+                    failure_details.append(f"{name}: {reason}")
+                    log.warning("llm.stream.failed", provider=name, error=reason)
                 continue
 
-        raise RuntimeError(f"All LLM providers failed for streaming. Last error: {last_error}")
+        details = "; ".join(failure_details)
+        raise RuntimeError(
+            f"All LLM providers failed for streaming. Details: [{details}]"
+        )
 
     async def health(self) -> dict[str, str]:
         """Check all provider health statuses."""
         results = {}
         for name, provider in self._providers.items():
             status = await provider.health_check()
-            self._status_cache[name] = status
+            self._set_status(name, status)
             results[name] = status.value
         return results
 

@@ -1,5 +1,6 @@
 """Concrete LLM provider implementations using LiteLLM."""
 
+import os
 from collections.abc import AsyncGenerator
 
 import litellm
@@ -252,13 +253,41 @@ class GoogleProvider(BaseLLMProvider):
 
 
 class OllamaProvider(BaseLLMProvider):
-    """Ollama local provider — offline fallback."""
+    """Ollama local provider — offline fallback.
+
+    Handles qwen3 thinking models by disabling thinking mode and
+    extracting content from alternative fields when needed.
+    """
 
     name = "ollama"
 
     def __init__(self):
         self.default_model = settings.llm.offline_model
-        self.base_url = "http://localhost:11434"
+        # Allow pointing at a remote Ollama instance via env var
+        self.base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+    def _extract_content(self, message) -> str:
+        """Extract content from response, handling thinking models.
+
+        qwen3 models put everything in a 'thinking' field and leave
+        'content' empty. This method checks all possible fields.
+        """
+        content = message.content or ""
+        if content:
+            return content
+
+        # Check provider-specific fields (where thinking models put output)
+        if hasattr(message, "provider_specific_fields") and message.provider_specific_fields:
+            thinking = message.provider_specific_fields.get("thinking", "")
+            if thinking:
+                log.debug("ollama.extracted_from_thinking", length=len(thinking))
+                return thinking
+
+        # Check reasoning_content (another field litellm may use)
+        if hasattr(message, "reasoning_content") and message.reasoning_content:
+            return message.reasoning_content
+
+        return content
 
     async def generate(
         self,
@@ -282,6 +311,8 @@ class OllamaProvider(BaseLLMProvider):
                 temperature=temperature,
                 max_tokens=max_tokens,
                 api_base=self.base_url,
+                timeout=120,  # Local models can be slow
+                extra_body={"options": {"num_predict": max_tokens}},
                 **kwargs,
             )
 
@@ -302,8 +333,10 @@ class OllamaProvider(BaseLLMProvider):
                         }
                     )
 
+            content = self._extract_content(response.choices[0].message)
+
             return LLMResponse(
-                content=response.choices[0].message.content or "",
+                content=content,
                 model=model,
                 provider=self.name,
                 usage={
@@ -340,13 +373,31 @@ class OllamaProvider(BaseLLMProvider):
                 max_tokens=max_tokens,
                 api_base=self.base_url,
                 stream=True,
+                timeout=120,  # Local models can be slow
+                extra_body={"options": {"num_predict": max_tokens}},
                 **kwargs,
             )
 
+            got_content = False
             async for chunk in response:
                 delta = chunk.choices[0].delta
                 if delta and delta.content:
+                    got_content = True
                     yield delta.content
+
+            # If no content was streamed (thinking model), do a non-streaming
+            # fallback to extract from the thinking field
+            if not got_content:
+                log.debug("ollama.stream.no_content_fallback", model=model)
+                fallback = await self.generate(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    tools=tools,
+                )
+                if fallback.content:
+                    yield fallback.content
 
         except Exception as e:
             log.error("ollama.stream.failed", error=str(e), model=model)
@@ -363,3 +414,4 @@ class OllamaProvider(BaseLLMProvider):
                 return ProviderStatus.ERROR
         except Exception:
             return ProviderStatus.OFFLINE
+

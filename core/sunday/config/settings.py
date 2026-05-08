@@ -17,13 +17,18 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 class LLMSettings(BaseSettings):
     """LLM provider configuration."""
 
-    model_config = SettingsConfigDict(env_prefix="SUNDAY_LLM_")
+    model_config = SettingsConfigDict(
+        env_prefix="SUNDAY_LLM_",
+        env_file=str(PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     primary_provider: Literal["groq", "google", "ollama"] = "groq"
     primary_model: str = "llama-3.3-70b-versatile"
     fallback_provider: Literal["groq", "google", "ollama"] = "google"
     fallback_model: str = "gemini-2.0-flash"
-    offline_model: str = "qwen2.5:3b"
+    offline_model: str = "qwen3:4b"
 
     # Rate limiting awareness
     max_retries: int = 2
