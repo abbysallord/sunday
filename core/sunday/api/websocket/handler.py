@@ -42,6 +42,8 @@ from sunday.database.vector import vector_db
 from sunday.models.messages import Conversation, Message, MessageSource, Role
 from sunday.utils.audio import decode_audio
 from sunday.utils.logging import log
+from sunday.agents.jobs import job_manager
+import uuid
 
 agent_manager = AgentManager(llm_router=llm_router)
 
@@ -156,7 +158,12 @@ async def _handle_chat(ws: WebSocket, data: dict, tts_enabled: bool = False) -> 
         conversation_id = conversation.id
 
     # Save user message
-    user_msg = Message(role=Role.USER, content=text, source=MessageSource.TEXT)
+    user_msg = Message(
+        role=Role.USER, 
+        content=text, 
+        source=MessageSource.TEXT,
+        metadata={"session_id": data.get("session_id", "")}
+    )
     conversation.add_message(user_msg)
     await db.save_message(conversation.id, user_msg)
 
@@ -422,6 +429,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     """Main WebSocket handler — routes incoming messages to appropriate handlers."""
     await ws.accept()
     log.info("ws.connected")
+    
+    session_id = str(uuid.uuid4())
+    async def job_event_callback(event_type: str, event_data: dict):
+        await _send_json(ws, event_type, event_data)
+        
+    job_manager.register_callback(session_id, job_event_callback)
 
     audio_buffer: list[bytes] = []
     tts_enabled: bool = False  # TTS for text chat, off by default
@@ -444,6 +457,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 msg_tts = data.get("tts_enabled")
                 if msg_tts is not None:
                     tts_enabled = bool(msg_tts)
+                # Pass session_id so jobs know where to emit
+                data["session_id"] = session_id
                 await _handle_chat(ws, data, tts_enabled=tts_enabled)
 
             elif msg_type == WS_MSG_TTS_TOGGLE:
@@ -467,3 +482,5 @@ async def websocket_endpoint(ws: WebSocket) -> None:
         log.info("ws.disconnected")
     except Exception as e:
         log.error("ws.error", error=str(e))
+    finally:
+        job_manager.unregister_callback(session_id)

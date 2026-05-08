@@ -228,3 +228,54 @@ class BaseToolAgent(BaseAgent, ABC):
 
         yield f"\nReached maximum tool loop limit ({self._max_loops})."
 
+
+class AsyncJobAgent(BaseAgent, ABC):
+    """Base class for agents that run long, autonomous background jobs.
+    
+    Instead of streaming tokens synchronously, these agents spawn a background
+    task and emit structured events to an event callback.
+    """
+
+    @abstractmethod
+    async def start_job(
+        self,
+        job_id: str,
+        message: Message,
+        context: list[dict[str, str]],
+        event_callback: callable,
+    ) -> None:
+        """Execute the long-running job.
+        
+        Args:
+            job_id: Unique ID for this job.
+            message: The user's input message.
+            context: Conversation history.
+            event_callback: An async function `await callback(event_type: str, data: dict)`
+                            to emit status updates (e.g., "status", "result").
+        """
+        ...
+
+    async def stream(
+        self, message: Message, context: list[dict[str, str]]
+    ) -> AsyncGenerator[str, None]:
+        """For AsyncJobAgents, the standard stream() method acts as a stub
+        that kicks off the job and returns an immediate acknowledgment.
+        """
+        import uuid
+        job_id = str(uuid.uuid4())
+        
+        from sunday.agents.jobs import job_manager
+        session_id = message.metadata.get("session_id", "")
+        
+        async def event_callback(event_type: str, data: dict):
+            if session_id:
+                await job_manager.emit_event(session_id, event_type, data)
+                
+        # Start background job
+        job_manager.start_job(
+            job_id, 
+            session_id, 
+            self.start_job(job_id, message, context, event_callback)
+        )
+        
+        yield f"*(Background task started: `{job_id[:8]}`)*\n\nI'm looking into this for you in the background. You can continue chatting while I work."
