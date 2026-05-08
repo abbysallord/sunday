@@ -40,7 +40,11 @@ export type WSMessageType =
   | "tts_audio"
   | "tts_end"
   | "error"
-  | "status";
+  | "status"
+  | "job_status"
+  | "job_result"
+  | "title_update"
+  | "provider_info";
 
 export interface WSMessage {
   type: string;
@@ -51,3 +55,10 @@ export interface WSMessage {
 
 export type ConnectionStatus = "connected" | "connecting" | "disconnected";
 export type VoiceState = "idle" | "listening" | "transcribing" | "processing" | "speaking";
+
+export interface BackgroundJob {
+  id: string;
+  status: string;
+  message: string;
+  result?: string;
+}

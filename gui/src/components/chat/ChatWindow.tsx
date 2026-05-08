@@ -5,10 +5,10 @@ import { StreamingBubble } from "./StreamingBubble";
 import { InputBar } from "./InputBar";
 import { VoiceButton } from "@/components/voice/VoiceButton";
 import { VoiceIndicator } from "@/components/voice/VoiceIndicator";
-import { Sun, X, AlertTriangle, Volume2, VolumeX } from "lucide-react";
+import { Sun, X, AlertTriangle, Volume2, VolumeX, Loader2 } from "lucide-react";
 
 export function ChatWindow() {
-  const { messages, isGenerating, streamingContent, errorMessage, clearError, ttsEnabled, toggleTTS } =
+  const { messages, isGenerating, streamingContent, errorMessage, clearError, ttsEnabled, toggleTTS, activeJobs } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -46,6 +46,21 @@ export function ChatWindow() {
           </div>
         )}
       </div>
+
+      {/* Active Jobs panel */}
+      {Object.keys(activeJobs).length > 0 && (
+        <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+          {Object.values(activeJobs).map((job) => (
+            <div key={job.id} className="bg-sunday-surface/90 backdrop-blur border border-sunday-border shadow-lg rounded-xl p-3 flex items-center gap-3 animate-fade-in w-64">
+              <Loader2 className="animate-spin text-sunday-accent" size={16} />
+              <div className="flex-1 overflow-hidden">
+                <p className="text-xs font-semibold text-sunday-text truncate">Deep Research Active</p>
+                <p className="text-[10px] text-sunday-text-muted truncate">{job.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Error toast */}
       {errorMessage && (

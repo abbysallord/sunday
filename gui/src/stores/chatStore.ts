@@ -25,6 +25,9 @@ interface ChatStore {
   // Error notification
   errorMessage: string | null;
 
+  // Background Jobs
+  activeJobs: Record<string, BackgroundJob>;
+
   // Actions
   connect: () => Promise<void>;
   loadConversations: () => Promise<void>;
@@ -53,6 +56,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   ttsEnabled: false,
   errorMessage: null,
   isSettingsOpen: false,
+  activeJobs: {},
 
   setSettingsOpen: (open) => set({ isSettingsOpen: open }),
 
@@ -165,6 +169,53 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           ),
         }));
       }
+    });
+
+    // Handle background jobs
+    ws.on("job_status", (msg) => {
+      const jobId = msg.data.job_id as string;
+      const status = msg.data.status as string;
+      const message = msg.data.message as string;
+      
+      set((state) => {
+        if (status === "cancelled") {
+          const newJobs = { ...state.activeJobs };
+          delete newJobs[jobId];
+          return { activeJobs: newJobs };
+        }
+        
+        return {
+          activeJobs: {
+            ...state.activeJobs,
+            [jobId]: { id: jobId, status, message }
+          }
+        };
+      });
+    });
+
+    ws.on("job_result", (msg) => {
+      const jobId = msg.data.job_id as string;
+      const result = msg.data.result as string;
+      
+      set((state) => {
+        const newJobs = { ...state.activeJobs };
+        delete newJobs[jobId];
+        
+        // When a job finishes, we inject its result directly into the chat
+        const assistantMsg: Message = {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: `**Research Job Completed**\n\n${result}`,
+          source: "text",
+          timestamp: new Date().toISOString(),
+          isStreaming: false,
+        };
+        
+        return { 
+          activeJobs: newJobs,
+          messages: [...state.messages, assistantMsg] 
+        };
+      });
     });
 
     // Handle errors
