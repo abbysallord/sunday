@@ -1,5 +1,6 @@
-"""Tool configurations strictly granting OS capabilities smoothly natively."""
+"""Coding tools for file system access and shell command execution."""
 
+import asyncio
 import subprocess
 from pathlib import Path
 
@@ -7,104 +8,121 @@ from sunday.agents.tools.registry import ToolRegistry
 from sunday.utils.logging import log
 
 
-def list_directory(path: str) -> str:
-    """Return explicit structural lists indicating directories and file endpoints cleanly."""
+async def list_directory(path: str) -> str:
+    """List files and directories at the given path."""
     log.info("coding.list_directory", target_path=path)
-    try:
-        target = Path(path).expanduser().resolve()
-        if not target.exists():
-            return f"Error: No directory found at {target}."
-        if not target.is_dir():
-            return f"Error: The target {target} is a file, not a directory."
 
-        items = []
-        for x in target.iterdir():
-            icon = "📁" if x.is_dir() else "📄"
-            items.append(f"{icon} {x.name}")
+    def _list(p: str) -> str:
+        try:
+            target = Path(p).expanduser().resolve()
+            if not target.exists():
+                return f"Error: No directory found at {target}."
+            if not target.is_dir():
+                return f"Error: {target} is a file, not a directory."
 
-        if not items:
-            return "Directory is empty."
+            items = []
+            for x in target.iterdir():
+                icon = "📁" if x.is_dir() else "📄"
+                items.append(f"{icon} {x.name}")
 
-        return "\n".join(sorted(items))
-    except Exception as e:
-        return f"Failed to traverse directory: {str(e)}"
+            if not items:
+                return "Directory is empty."
+
+            return "\n".join(sorted(items))
+        except Exception as e:
+            return f"Failed to list directory: {str(e)}"
+
+    return await asyncio.to_thread(_list, path)
 
 
-def read_file(path: str) -> str:
-    """Yield explicit python or text contexts bounded strictly."""
+async def read_file(path: str) -> str:
+    """Read the text contents of a file."""
     log.info("coding.read_file", target_path=path)
-    try:
-        target = Path(path).expanduser().resolve()
-        if not target.exists() or not target.is_file():
-            return f"Error: File at {target} does not exist natively."
 
-        content = target.read_text(encoding="utf-8")
+    def _read(p: str) -> str:
+        try:
+            target = Path(p).expanduser().resolve()
+            if not target.exists():
+                return f"Error: File not found at {target}."
+            if not target.is_file():
+                return f"Error: {target} is not a file."
 
-        # Token protections implicitly
-        if len(content) > 15000:
-            return content[:15000] + "\n\n... [Content strictly truncated for exceeding limits.]"
+            content = target.read_text(encoding="utf-8")
 
-        return content
-    except Exception as e:
-        return f"Failed to read file: {str(e)}"
+            if len(content) > 15000:
+                return content[:15000] + "\n\n... [Content truncated at 15000 chars]"
+
+            return content
+        except Exception as e:
+            return f"Failed to read file: {str(e)}"
+
+    return await asyncio.to_thread(_read, path)
 
 
-def write_file(path: str, content: str) -> str:
-    """Overwrites or injects explicit blocks strictly physically natively."""
+async def write_file(path: str, content: str) -> str:
+    """Write content to a file, creating parent directories if needed."""
     log.info("coding.write_file", target_path=path)
-    try:
-        target = Path(path).expanduser().resolve()
 
-        # Create explicit parent bounds if they do not magically exist natively
-        target.parent.mkdir(parents=True, exist_ok=True)
+    def _write(p: str, c: str) -> str:
+        try:
+            target = Path(p).expanduser().resolve()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(c, encoding="utf-8")
+            return f"Success: File written to {target}"
+        except Exception as e:
+            return f"Error writing file: {str(e)}"
 
-        target.write_text(content, encoding="utf-8")
-        return f"Success: File successfully written natively and saved to -> {target}"
-    except Exception as e:
-        return f"Error writing file: {str(e)}"
+    return await asyncio.to_thread(_write, path, content)
 
 
-def run_shell(command: str) -> str:
-    """Execute raw bash logic locally tracking STDOUT natively."""
+async def run_shell(command: str) -> str:
+    """Execute a shell command and return stdout/stderr."""
     log.info("coding.run_shell", cmd=command)
-    try:
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-        output = result.stdout or ""
-        error = result.stderr or ""
 
-        combined = []
-        if output:
-            combined.append(f"[STDOUT]:\n{output}")
-        if error:
-            combined.append(f"[STDERR]:\n{error}")
+    def _run(cmd: str) -> str:
+        try:
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, timeout=30
+            )
+            output = result.stdout or ""
+            error = result.stderr or ""
 
-        if not combined:
-            return "Command executed structurally with zero output parameters locally."
+            combined = []
+            if output:
+                combined.append(f"[STDOUT]:\n{output}")
+            if error:
+                combined.append(f"[STDERR]:\n{error}")
 
-        final_str = "\n".join(combined)
+            if not combined:
+                combined.append(
+                    f"Command executed successfully (exit code {result.returncode}) with no output."
+                )
 
-        # Token bounds protection implicitly
-        if len(final_str) > 10000:
-            return final_str[:9997] + "..."
+            final_str = "\n".join(combined)
 
-        return final_str
-    except subprocess.TimeoutExpired:
-        return "Error: Command timed out after 10 bounds natively."
-    except Exception as e:
-        return f"Bash structural execution explicitly failed: {str(e)}"
+            if len(final_str) > 10000:
+                return final_str[:9997] + "..."
+
+            return final_str
+        except subprocess.TimeoutExpired:
+            return "Error: Command timed out after 30 seconds."
+        except Exception as e:
+            return f"Error executing command: {str(e)}"
+
+    return await asyncio.to_thread(_run, command)
 
 
 def register_coding_tools(registry: ToolRegistry) -> None:
-    """Passively map structural references explicitly."""
+    """Register file system and shell tools for the Coding Agent."""
     registry.register(
         name="list_directory",
-        description="List all explicit files and folders securely mapped within an OS level directory boundary.",
+        description="List all files and folders in a directory.",
         parameters={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The absolute or relative directory structure. Use '.' for current working structure.",
+                    "description": "Absolute path to the directory. Use '~' for home directory.",
                 }
             },
             "required": ["path"],
@@ -114,13 +132,13 @@ def register_coding_tools(registry: ToolRegistry) -> None:
 
     registry.register(
         name="read_file",
-        description="Read structural textual contents completely securely off a file.",
+        description="Read the text contents of a file.",
         parameters={
             "type": "object",
             "properties": {
                 "path": {
                     "type": "string",
-                    "description": "The exact absolute mapping linking directly.",
+                    "description": "Absolute path to the file to read.",
                 }
             },
             "required": ["path"],
@@ -130,14 +148,17 @@ def register_coding_tools(registry: ToolRegistry) -> None:
 
     registry.register(
         name="write_file",
-        description="Creates or totally overwrites structural definitions dynamically mapping natively.",
+        description="Write content to a file. Creates the file and parent directories if they don't exist.",
         parameters={
             "type": "object",
             "properties": {
-                "path": {"type": "string", "description": "The destination endpoint natively."},
+                "path": {
+                    "type": "string",
+                    "description": "Absolute path for the file to write.",
+                },
                 "content": {
                     "type": "string",
-                    "description": "The massive explicit textual content block logically constructed.",
+                    "description": "The full text content to write to the file.",
                 },
             },
             "required": ["path", "content"],
@@ -147,13 +168,17 @@ def register_coding_tools(registry: ToolRegistry) -> None:
 
     registry.register(
         name="run_shell",
-        description="Evaluate literal Bash logic sequences mapping execution boundaries completely isolated structurally. e.g. 'pip install x', 'ls -la', 'python script.py'",
+        description=(
+            "Execute a bash shell command and return the output. "
+            "Use for running scripts, installing packages, checking system state, etc. "
+            "Examples: 'ls -la', 'python script.py', 'pip install package'."
+        ),
         parameters={
             "type": "object",
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The precise terminal hook string command natively.",
+                    "description": "The shell command to execute.",
                 }
             },
             "required": ["command"],

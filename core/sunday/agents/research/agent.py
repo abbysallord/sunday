@@ -19,13 +19,33 @@ class ResearchAgent(BaseToolAgent):
     def info(self) -> AgentInfo:
         return AgentInfo(
             id="research_agent",
-            name="World Wide Indexer",
-            description="Agent that uses live web API connections to verify headlines or documentation context offline.",
+            name="Research Agent",
+            description="Searches the live internet for current information, news, and facts.",
             capabilities=[
                 AgentCapability(
-                    name="web-browsing",
-                    description="Ability to parse internet parameters actively.",
-                    keywords=["search", "who is", "fetch", "news", "google", "website"],
+                    name="web_search",
+                    description="Search the internet for real-time information.",
+                    keywords=[
+                        "search",
+                        "look up",
+                        "find out",
+                        "who is",
+                        "what is",
+                        "latest",
+                        "news",
+                        "current",
+                        "today",
+                        "recent",
+                        "google",
+                        "website",
+                        "fetch",
+                        "browse",
+                        "web",
+                        "internet",
+                        "find information",
+                        "search for",
+                        "look up",
+                    ],
                 ),
             ],
             version="0.1.0",
@@ -35,9 +55,14 @@ class ResearchAgent(BaseToolAgent):
     @property
     def system_prompt(self) -> str:
         return (
-            "You are SUNDAY's dedicated Research Agent. You possess the capability to search "
-            "the live internet globally for current news, facts, and context using DuckDuckGo. "
-            "WARNING: Network API payload limits are extremely sensitive. You must NEVER call 'search_web' "
-            "more than 2 times in a single query. Do not loop searches endlessly! Formulate your "
-            "best summarization given whatever search data you instantly pull. If looking for recent news or sports scores, ALWAYS evaluate 'timelimit'='w' or 'm' to filter stale data. If no exact data is found, guess or state uncertainty."
+            "You are SUNDAY's Research Agent. You can search the live internet for current "
+            "information using DuckDuckGo.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. ALWAYS use the 'search_web' tool to find information. Do NOT say you can't search.\n"
+            "2. For recent events or news, set timelimit='w' (week) or 'm' (month).\n"
+            "3. If the first search doesn't find enough, try ONE more search with refined terms.\n"
+            "4. After getting search results, summarize the findings clearly with source URLs.\n"
+            "5. If search returns no results, say so honestly — don't make up information.\n"
+            "6. Use 'fetch_webpage' to read a specific page for more detail when needed.\n"
+            "7. Maximum 2 tool calls per query to stay within rate limits."
         )
