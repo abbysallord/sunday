@@ -4,10 +4,11 @@ import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
 import { InputBar } from "./InputBar";
 import { VoiceButton } from "@/components/voice/VoiceButton";
-import { Sun, X, AlertTriangle } from "lucide-react";
+import { VoiceIndicator } from "@/components/voice/VoiceIndicator";
+import { Sun, X, AlertTriangle, Volume2, VolumeX } from "lucide-react";
 
 export function ChatWindow() {
-  const { messages, isGenerating, streamingContent, errorMessage, clearError } =
+  const { messages, isGenerating, streamingContent, errorMessage, clearError, ttsEnabled, toggleTTS } =
     useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -64,8 +65,22 @@ export function ChatWindow() {
 
       {/* Voice-First Input area */}
       <div className="border-t border-sunday-border bg-sunday-surface/80 backdrop-blur-xl z-10 pb-6 relative rounded-t-[2.5rem] shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.3)]">
-        {/* Toggle Keyboard Button */}
-        <div className="absolute top-0 right-8 -translate-y-1/2">
+        {/* Top controls row */}
+        <div className="absolute top-0 right-8 -translate-y-1/2 flex gap-2">
+           {/* TTS Toggle Button */}
+           <button
+             onClick={toggleTTS}
+             className={`p-3 border rounded-full shadow-[0_0_20px_rgba(0,0,0,0.2)] transition-all duration-300 ${
+               ttsEnabled
+                 ? "bg-sunday-accent/20 border-sunday-accent/40 text-sunday-accent hover:bg-sunday-accent/30"
+                 : "bg-sunday-surface-hover border-sunday-border text-sunday-text-muted hover:bg-sunday-border hover:text-sunday-text"
+             }`}
+             title={ttsEnabled ? "Disable read-aloud" : "Enable read-aloud"}
+           >
+             {ttsEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+           </button>
+
+           {/* Toggle Keyboard Button */}
            <button 
              onClick={() => setShowInputBar(!showInputBar)} 
              className="p-3 bg-sunday-surface-hover border gap-2 flex items-center border-sunday-border rounded-full hover:bg-sunday-border hover:text-sunday-text text-sunday-text-muted shadow-[0_0_20px_rgba(0,0,0,0.2)] transition-all duration-300"
@@ -83,7 +98,8 @@ export function ChatWindow() {
            </div>
 
            {/* Voice Button Area - Prominent */}
-           <div className={`flex justify-center transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!showInputBar ? 'scale-125 translate-y-0 mt-4' : 'scale-100 translate-y-16 absolute opacity-0 pointer-events-none'}`}>
+           <div className={`flex flex-col items-center gap-3 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!showInputBar ? 'scale-125 translate-y-0 mt-4' : 'scale-100 translate-y-16 absolute opacity-0 pointer-events-none'}`}>
+               <VoiceIndicator />
                <VoiceButton variant="large" />
            </div>
            
@@ -133,4 +149,3 @@ function SuggestionChip({ text }: { text: string }) {
     </button>
   );
 }
-

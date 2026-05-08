@@ -19,6 +19,9 @@ interface ChatStore {
   // Voice
   voiceState: VoiceState;
 
+  // TTS for text chat
+  ttsEnabled: boolean;
+
   // Error notification
   errorMessage: string | null;
 
@@ -31,6 +34,7 @@ interface ChatStore {
   sendMessage: (text: string) => void;
   stopGeneration: () => void;
   setVoiceState: (state: VoiceState) => void;
+  toggleTTS: () => void;
   clearError: () => void;
 
   // Settings
@@ -46,10 +50,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isGenerating: false,
   streamingContent: "",
   voiceState: "idle",
+  ttsEnabled: false,
   errorMessage: null,
   isSettingsOpen: false,
 
   setSettingsOpen: (open) => set({ isSettingsOpen: open }),
+
+  toggleTTS: () => {
+    const newState = !get().ttsEnabled;
+    set({ ttsEnabled: newState });
+    // Notify the backend of the toggle
+    ws.send("tts_toggle", { enabled: newState });
+  },
 
   connect: async () => {
     // Guard against duplicate handler registration (React StrictMode calls effects twice)
@@ -108,6 +120,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           isGenerating: false,
           streamingContent: "",
           activeConversationId: convId,
+          // Reset voice state if we were in a voice flow
+          voiceState: state.voiceState !== "idle" ? "idle" : state.voiceState,
         };
       });
 
@@ -115,12 +129,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       get().loadConversations();
     });
 
-    // Handle status updates
+    // TTS done — voice flow complete
+    ws.on("tts_end", () => {
+      set({ voiceState: "idle" });
+    });
+
+    // Handle status updates — also drives voiceState transitions
     ws.on("status", (msg) => {
       const convId = msg.data.conversation_id as string;
+      const status = msg.data.status as string;
       if (convId && !get().activeConversationId) {
         set({ activeConversationId: convId });
       }
+      if (status === "transcribing") set({ voiceState: "transcribing" });
+      else if (status === "processing") set({ voiceState: "processing" });
     });
 
     // Handle TTS audio
@@ -225,10 +247,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       streamingContent: "",
     }));
 
-    // Send via WebSocket
+    // Send via WebSocket — include TTS preference
     ws.send("chat", {
       message: text.trim(),
       conversation_id: state.activeConversationId,
+      tts_enabled: state.ttsEnabled,
     });
   },
 
