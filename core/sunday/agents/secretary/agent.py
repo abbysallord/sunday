@@ -10,7 +10,9 @@ from collections.abc import AsyncGenerator
 from sunday.agents.base import AgentCapability, AgentInfo, BaseAgent
 from sunday.agents.secretary.prompts import SECRETARY_SYSTEM_PROMPT
 from sunday.core.llm.router import LLMRouter
+from sunday.database.vector import vector_db
 from sunday.models.messages import Message
+from sunday.utils.logging import log
 
 
 class SecretaryAgent(BaseAgent):
@@ -50,12 +52,40 @@ class SecretaryAgent(BaseAgent):
     def system_prompt(self) -> str:
         return SECRETARY_SYSTEM_PROMPT
 
+    def _inject_memories(
+        self, message: Message, context: list[dict[str, str]]
+    ) -> list[dict[str, str]]:
+        """Inject top-3 relevant memories from ChromaDB into the context.
+
+        This gives the Secretary passive memory recall even when the
+        Memory Agent isn't explicitly routed to.
+        """
+        try:
+            memories = vector_db.query_memories(message.content, limit=3)
+            if memories:
+                memory_block = "\n---\n".join(memories)
+                return [
+                    {
+                        "role": "system",
+                        "content": (
+                            "Relevant context from past conversations "
+                            "(use if helpful, ignore if not relevant):\n"
+                            f"{memory_block}"
+                        ),
+                    }
+                ] + context
+        except Exception as e:
+            log.warning("secretary.memory_inject_failed", error=str(e))
+
+        return context
+
     async def process(
         self,
         message: Message,
         context: list[dict[str, str]],
     ) -> str:
-        messages = self._build_messages(message, context)
+        enriched_context = self._inject_memories(message, context)
+        messages = self._build_messages(message, enriched_context)
         response = await self.llm.generate(messages=messages)
         return response.content
 
@@ -64,6 +94,7 @@ class SecretaryAgent(BaseAgent):
         message: Message,
         context: list[dict[str, str]],
     ) -> AsyncGenerator[str, None]:
-        messages = self._build_messages(message, context)
+        enriched_context = self._inject_memories(message, context)
+        messages = self._build_messages(message, enriched_context)
         async for token in self.llm.stream(messages=messages):
             yield token
