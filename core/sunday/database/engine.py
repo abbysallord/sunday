@@ -1,4 +1,10 @@
-"""SQLite database engine with async support."""
+"""SQLite database engine with async support.
+
+All database access is intentionally flat in this module — no separate
+repository layer. For a single-user local app this keeps things simple.
+If multi-user or multi-tenant support is added later, extract a repository
+layer at that point.
+"""
 
 import json
 from pathlib import Path
