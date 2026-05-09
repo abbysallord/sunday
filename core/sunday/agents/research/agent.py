@@ -38,6 +38,9 @@ class DeepResearchAgent(AsyncJobAgent):
                         "explain in depth",
                         "comprehensive analysis",
                         "search",
+                        "who is",
+                        "latest",
+                        "find out"
                     ],
                 ),
             ],
@@ -82,14 +85,29 @@ class DeepResearchAgent(AsyncJobAgent):
                 # 2. EXECUTE
                 results = await self._execute_searches(queries)
                 
-                # Append to scratchpad
-                scratchpad += f"\n\n--- Loop {loop_count} Results ---\n"
+                # Append search summaries to scratchpad
+                scratchpad += f"\n\n--- Loop {loop_count} Search Summaries ---\n"
                 for q, r in zip(queries, results):
                     scratchpad += f"\nQuery: {q}\nFindings:\n{r}\n"
 
+                # 3. DEEP READ SELECTION
+                await event_callback("job_status", {
+                    "job_id": job_id, 
+                    "status": "reading", 
+                    "message": "Selecting and reading full articles..."
+                })
+                urls_to_read = await self._plan_deep_reads(original_query, scratchpad)
+                
+                # 4. DEEP READ EXTRACTION
+                if urls_to_read:
+                    extractions = await self._execute_deep_reads(original_query, urls_to_read)
+                    scratchpad += f"\n\n--- Loop {loop_count} Deep Read Extractions ---\n"
+                    for url, facts in zip(urls_to_read, extractions):
+                        scratchpad += f"\nSource: {url}\nExtracted Facts:\n{facts}\n"
+
                 await event_callback("job_status", {"job_id": job_id, "status": "evaluating", "message": "Evaluating findings..."})
 
-                # 3. EVALUATE
+                # 5. EVALUATE
                 is_complete, gaps = await self._evaluate(original_query, scratchpad)
                 
                 if is_complete or loop_count >= self.max_loops:
@@ -122,7 +140,8 @@ class DeepResearchAgent(AsyncJobAgent):
         response = await self.llm.generate(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
-            max_tokens=200
+            max_tokens=200,
+            task="planning"
         )
         
         content = response.content.strip()
@@ -157,6 +176,63 @@ class DeepResearchAgent(AsyncJobAgent):
         
         return processed_results
 
+    async def _plan_deep_reads(self, query: str, scratchpad: str) -> List[str]:
+        """Select up to 2 URLs from the scratchpad to read deeply."""
+        prompt = (
+            f"You are a Research Director. The goal is to answer: '{query}'.\n"
+            f"Here are the search snippets gathered so far:\n{scratchpad}\n\n"
+            "Identify up to 2 HTTP/HTTPS URLs from the text above that seem most promising for a deep read. "
+            "Return ONLY a JSON list of strings (the URLs). No markdown formatting."
+        )
+        response = await self.llm.generate(
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=150,
+            task="planning"
+        )
+        
+        content = response.content.strip()
+        if content.startswith("```json"):
+            content = content[7:-3]
+        elif content.startswith("```"):
+            content = content[3:-3]
+            
+        try:
+            urls = json.loads(content)
+            if isinstance(urls, list):
+                return urls[:2]
+        except json.JSONDecodeError:
+            pass
+        return []
+
+    async def _execute_deep_reads(self, query: str, urls: List[str]) -> List[str]:
+        """Fetch webpages and extract facts from them using the extraction task."""
+        extractions = []
+        for url in urls:
+            try:
+                # 1. Fetch raw text
+                raw_text = await self.registry.execute("fetch_webpage", {"url": url})
+                
+                # 2. Extract facts using high-context LLM (extraction task)
+                prompt = (
+                    f"Extract all factual information, statistics, and expert quotes from the following text "
+                    f"that are relevant to answering the query: '{query}'.\n\n"
+                    f"Text:\n{raw_text}\n\n"
+                    "Provide a bulleted list of facts. Be concise but comprehensive."
+                )
+                
+                response = await self.llm.generate(
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.1,
+                    max_tokens=1000,
+                    task="extraction"
+                )
+                extractions.append(response.content)
+            except Exception as e:
+                extractions.append(f"Failed to read {url}: {str(e)}")
+                
+        return extractions
+
     async def _evaluate(self, query: str, scratchpad: str) -> tuple[bool, str]:
         """Determine if we have enough info to stop."""
         prompt = (
@@ -168,7 +244,8 @@ class DeepResearchAgent(AsyncJobAgent):
         response = await self.llm.generate(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
-            max_tokens=150
+            max_tokens=150,
+            task="planning"
         )
         
         content = response.content.strip()
@@ -194,6 +271,7 @@ class DeepResearchAgent(AsyncJobAgent):
         response = await self.llm.generate(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
-            max_tokens=2000
+            max_tokens=2000,
+            task="synthesis"
         )
         return response.content
