@@ -128,7 +128,11 @@ class BaseToolAgent(BaseAgent, ABC):
         schemas = self.registry.get_tool_schemas()
 
         for _ in range(self._max_loops):
-            response = await self.llm.generate(messages=messages, tools=schemas)
+            response = await self.llm.generate(
+                messages=messages, 
+                tools=schemas, 
+                task="tool_call"
+            )
 
             assistant_msg: dict = {"role": "assistant", "content": response.content}
             if response.tool_calls:
@@ -171,7 +175,11 @@ class BaseToolAgent(BaseAgent, ABC):
         for _loop_idx in range(self._max_loops):
             try:
                 response = await asyncio.wait_for(
-                    self.llm.generate(messages=messages, tools=schemas),
+                    self.llm.generate(
+                        messages=messages, 
+                        tools=schemas, 
+                        task="tool_call"
+                    ),
                     timeout=60.0,
                 )
             except TimeoutError:
@@ -189,7 +197,10 @@ class BaseToolAgent(BaseAgent, ABC):
                     # Stream the final answer token-by-token for a better UX
                     # Build messages WITHOUT the last assistant response so the LLM regenerates it
                     try:
-                        async for token in self.llm.stream(messages=messages[:-1]):
+                        async for token in self.llm.stream(
+                            messages=messages[:-1],
+                            task="synthesis"
+                        ):
                             yield token
                     except Exception:
                         # Fallback: just yield the content we already have
@@ -254,6 +265,10 @@ class AsyncJobAgent(BaseAgent, ABC):
                             to emit status updates (e.g., "status", "result").
         """
         ...
+
+    async def process(self, message: Message, context: list[dict[str, str]]) -> str:
+        """Process is not supported for AsyncJobAgents. Use stream() instead."""
+        return "This agent runs in the background. Please use the streaming interface."
 
     async def stream(
         self, message: Message, context: list[dict[str, str]]
