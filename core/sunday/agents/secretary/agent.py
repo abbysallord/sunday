@@ -86,7 +86,7 @@ class SecretaryAgent(BaseAgent):
     ) -> str:
         enriched_context = self._inject_memories(message, context)
         messages = self._build_messages(message, enriched_context)
-        response = await self.llm.generate(messages=messages)
+        response = await self.llm.generate(messages=messages, task="synthesis")
         return response.content
 
     async def stream(
@@ -96,5 +96,5 @@ class SecretaryAgent(BaseAgent):
     ) -> AsyncGenerator[str, None]:
         enriched_context = self._inject_memories(message, context)
         messages = self._build_messages(message, enriched_context)
-        async for token in self.llm.stream(messages=messages):
+        async for token in self.llm.stream(messages=messages, task="synthesis"):
             yield token
