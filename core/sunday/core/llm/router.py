@@ -111,8 +111,13 @@ class LLMRouter:
         max_tokens: int = 4096,
         tools: list[dict] | None = None,
         preferred_provider: str | None = None,
+        task: str | None = None,
     ) -> LLMResponse:
         """Generate a response, automatically failing over to backup providers."""
+
+        # Task-specific preference takes precedence over general preference
+        if task and not preferred_provider:
+            preferred_provider = settings.llm.task_routing.get(task)
 
         providers = self._get_ordered_providers()
 
@@ -173,8 +178,13 @@ class LLMRouter:
         max_tokens: int = 4096,
         tools: list[dict] | None = None,
         preferred_provider: str | None = None,
+        task: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream response tokens, with automatic failover."""
+
+        # Task-specific preference
+        if task and not preferred_provider:
+            preferred_provider = settings.llm.task_routing.get(task)
 
         providers = self._get_ordered_providers()
 

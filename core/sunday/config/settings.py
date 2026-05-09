@@ -29,6 +29,15 @@ class LLMSettings(BaseSettings):
     fallback_provider: Literal["groq", "google", "ollama"] = "google"
     fallback_model: str = "gemini-2.0-flash"
     offline_model: str = "qwen3:4b"
+    
+    # Task-specific preferred providers
+    task_routing: dict[str, str] = {
+        "planning": "groq",
+        "extraction": "google",
+        "synthesis": "groq",
+        "summarization": "ollama",
+        "tool_call": "groq",
+    }
 
     # Rate limiting awareness
     max_retries: int = 2
