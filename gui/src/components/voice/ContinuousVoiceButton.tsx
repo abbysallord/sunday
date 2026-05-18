@@ -65,29 +65,34 @@ export function ContinuousVoiceButton() {
       logDebug("Requesting microphone permissions...");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          sampleRate: 16000,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
         },
       });
 
-      // Browser Web Audio API handles automatic high-quality downsampling to 16kHz!
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 16000,
-        latencyHint: "interactive",
-      });
+      // Avoid constructor options to prevent NotSupportedError on some Linux WebKit versions
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      
+      // Explicitly resume to avoid Chrome/Tauri "suspended by default" autoplay policy
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
 
       const source = audioContext.createMediaStreamSource(stream);
       
-      // Buffer size of 1024 samples is exactly 64ms at 16kHz
-      const processor = audioContext.createScriptProcessor(1024, 1, 1);
+      // Buffer size of 2048 samples is highly stable and avoids underruns on GStreamer/Linux
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
 
       processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0); // raw mono float32 array
+        const inputData = e.inputBuffer.getChannelData(0); // raw native float32 array
         
-        // Fast, call-stack safe array buffer binary to base64 conversion
-        const uint8 = new Uint8Array(inputData.buffer);
+        // High-fidelity downsample from native rate (e.g. 44.1kHz / 48kHz) to exactly 16kHz
+        const downsampled = downsampleBuffer(inputData, audioContext.sampleRate, 16000);
+        
+        // Safe, precise byte-aligned view to avoid pooled buffer offset issues
+        const uint8 = new Uint8Array(downsampled.buffer, downsampled.byteOffset, downsampled.byteLength);
         let binary = "";
         const len = uint8.byteLength;
         for (let i = 0; i < len; i++) {
@@ -182,4 +187,32 @@ export function ContinuousVoiceButton() {
       </button>
     </div>
   );
+}
+
+function downsampleBuffer(
+  buffer: Float32Array,
+  inputSampleRate: number,
+  outputSampleRate: number
+): Float32Array {
+  if (inputSampleRate === outputSampleRate) {
+    return buffer;
+  }
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const newLength = Math.round(buffer.length / sampleRateRatio);
+  const result = new Float32Array(newLength);
+  let offsetResult = 0;
+  let offsetBuffer = 0;
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+    let accum = 0;
+    let count = 0;
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i];
+      count++;
+    }
+    result[offsetResult] = count > 0 ? accum / count : 0;
+    offsetResult++;
+    offsetBuffer = nextOffsetBuffer;
+  }
+  return result;
 }
