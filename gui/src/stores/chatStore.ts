@@ -18,6 +18,7 @@ interface ChatStore {
 
   // Voice
   voiceState: VoiceState;
+  isContinuousVoiceActive: boolean;
 
   // TTS for text chat
   ttsEnabled: boolean;
@@ -37,6 +38,8 @@ interface ChatStore {
   sendMessage: (text: string) => void;
   stopGeneration: () => void;
   setVoiceState: (state: VoiceState) => void;
+  setContinuousVoiceActive: (active: boolean) => void;
+  stopAudio: () => void;
   toggleTTS: () => void;
   clearError: () => void;
 
@@ -53,6 +56,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isGenerating: false,
   streamingContent: "",
   voiceState: "idle",
+  isContinuousVoiceActive: false,
   ttsEnabled: false,
   errorMessage: null,
   isSettingsOpen: false,
@@ -135,7 +139,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     // TTS done — voice flow complete
     ws.on("tts_end", () => {
-      set({ voiceState: "idle" });
+      if (!get().isContinuousVoiceActive) {
+        set({ voiceState: "idle" });
+      }
     });
 
     // Handle status updates — also drives voiceState transitions
@@ -145,16 +151,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (convId && !get().activeConversationId) {
         set({ activeConversationId: convId });
       }
-      if (status === "transcribing") set({ voiceState: "transcribing" });
+      if (status === "listening") set({ voiceState: "listening" });
+      else if (status === "transcribing") set({ voiceState: "transcribing" });
       else if (status === "processing") set({ voiceState: "processing" });
+      else if (status === "idle" && !get().isContinuousVoiceActive) set({ voiceState: "idle" });
     });
 
     // Handle TTS audio
     ws.on("tts_audio", (msg) => {
       const audioB64 = msg.data.audio as string;
       if (audioB64) {
+        set({ voiceState: "speaking" });
         playAudioBase64(audioB64);
       }
+    });
+
+    // Handle voice barge-in (interrupted by user speaking)
+    ws.on("voice_barge_in", () => {
+      stopAudioPlayback();
+      set({ voiceState: "listening" });
     });
 
     // Handle title updates (LLM-generated smart titles)
@@ -314,6 +329,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     set({ voiceState });
   },
 
+  setContinuousVoiceActive: (active: boolean) => {
+    set({ isContinuousVoiceActive: active });
+  },
+
+  stopAudio: () => {
+    stopAudioPlayback();
+  },
+
   clearError: () => {
     set({ errorMessage: null });
   },
@@ -323,6 +346,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
 const audioQueue: string[] = [];
 let isPlaying = false;
+let currentAudio: HTMLAudioElement | null = null;
+
+export function stopAudioPlayback() {
+  audioQueue.length = 0; // Clear the queue
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+  }
+  isPlaying = false;
+}
 
 function playAudioBase64(base64: string) {
   audioQueue.push(base64);
@@ -334,25 +367,40 @@ function playAudioBase64(base64: string) {
 function playNext() {
   if (audioQueue.length === 0) {
     isPlaying = false;
+    const state = useChatStore.getState();
+    if (state.isContinuousVoiceActive) {
+      ws.send("continuous_voice_resume_listening", {});
+      state.setVoiceState("listening");
+    } else {
+      state.setVoiceState("idle");
+    }
     return;
   }
 
   isPlaying = true;
+  useChatStore.getState().setVoiceState("speaking");
+  
   const base64 = audioQueue.shift()!;
   const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: "audio/wav" });
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  currentAudio = audio;
 
   audio.onended = () => {
     URL.revokeObjectURL(url);
+    if (currentAudio === audio) currentAudio = null;
     playNext();
   };
 
   audio.onerror = () => {
     URL.revokeObjectURL(url);
+    if (currentAudio === audio) currentAudio = null;
     playNext();
   };
 
-  audio.play().catch(() => playNext());
+  audio.play().catch(() => {
+    if (currentAudio === audio) currentAudio = null;
+    playNext();
+  });
 }

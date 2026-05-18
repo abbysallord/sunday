@@ -4,6 +4,7 @@ import { MessageBubble } from "./MessageBubble";
 import { StreamingBubble } from "./StreamingBubble";
 import { InputBar } from "./InputBar";
 import { VoiceButton } from "@/components/voice/VoiceButton";
+import { ContinuousVoiceButton } from "@/components/voice/ContinuousVoiceButton";
 import { VoiceIndicator } from "@/components/voice/VoiceIndicator";
 import { Sun, X, AlertTriangle, Volume2, VolumeX, Loader2 } from "lucide-react";
 
@@ -115,7 +116,10 @@ export function ChatWindow() {
            {/* Voice Button Area - Prominent */}
            <div className={`flex flex-col items-center gap-3 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${!showInputBar ? 'scale-125 translate-y-0 mt-4' : 'scale-100 translate-y-16 absolute opacity-0 pointer-events-none'}`}>
                <VoiceIndicator />
-               <VoiceButton variant="large" />
+               <div className="flex items-center gap-4">
+                   <ContinuousVoiceButton />
+                   <VoiceButton variant="large" />
+               </div>
            </div>
            
            <p className="text-[10px] text-sunday-text-muted text-center mt-6 select-none opacity-50 tracking-wide font-medium">
