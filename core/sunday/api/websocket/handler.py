@@ -521,8 +521,8 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                 cancel_active_response()
                 continuous_voice_active = True
                 continuous_listening = True
-                # Start with a responsive speech detection count (2 chunks)
-                continuous_vad = RollingVAD(speech_start_chunks=2)
+                # Start with a responsive speech detection count (4 chunks of 512 samples = 128ms)
+                continuous_vad = RollingVAD(chunk_size=512, speech_start_chunks=4, silence_end_chunks=30)
                 await _send_json(ws, WS_MSG_STATUS, {"status": "listening"})
 
             elif msg_type == WS_MSG_CONTINUOUS_VOICE_STOP:
@@ -549,13 +549,13 @@ async def websocket_endpoint(ws: WebSocket) -> None:
                     continue
 
                 # Adaptive speech start threshold:
-                # If SUNDAY is currently speaking/processing, we raise the threshold to 4 chunks (~256ms)
+                # If SUNDAY is currently speaking/processing, we raise the threshold to 8 chunks (~256ms)
                 # to prevent acoustic feedback/echo bleeding from triggering a false barge-in.
                 is_active = active_response_task and not active_response_task.done()
                 if is_active:
-                    continuous_vad.speech_start_chunks = 4
+                    continuous_vad.speech_start_chunks = 8
                 else:
-                    continuous_vad.speech_start_chunks = 2
+                    continuous_vad.speech_start_chunks = 4
 
                 # Run stateful VAD
                 state, speech_data = continuous_vad.process_audio(chunk)

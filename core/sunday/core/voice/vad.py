@@ -98,9 +98,9 @@ class RollingVAD:
     def __init__(
         self,
         sample_rate: int = 16000,
-        chunk_size: int = 1024,
-        speech_start_chunks: int = 2,
-        silence_end_chunks: int = 15,  # ~960ms of silence at 16kHz with 1024 chunk size
+        chunk_size: int = 512,
+        speech_start_chunks: int = 4,
+        silence_end_chunks: int = 30,  # ~960ms of silence at 16kHz with 512 chunk size
     ):
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
