@@ -20,6 +20,10 @@ WS_MSG_PROVIDER_INFO = "provider_info"
 WS_MSG_TTS_TOGGLE = "tts_toggle"
 WS_MSG_JOB_STATUS = "job_status"
 WS_MSG_JOB_RESULT = "job_result"
+WS_MSG_CONTINUOUS_VOICE_START = "continuous_voice_start"
+WS_MSG_CONTINUOUS_VOICE_AUDIO = "continuous_voice_audio"
+WS_MSG_CONTINUOUS_VOICE_STOP = "continuous_voice_stop"
+WS_MSG_VOICE_BARGE_IN = "voice_barge_in"
 
 # Conversation
 MAX_CONTEXT_MESSAGES = 50  # Max messages sent to LLM for context

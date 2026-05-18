@@ -34,9 +34,14 @@ from sunday.config.constants import (
     WS_MSG_TTS_TOGGLE,
     WS_MSG_VOICE_AUDIO,
     WS_MSG_VOICE_END,
+    WS_MSG_CONTINUOUS_VOICE_START,
+    WS_MSG_CONTINUOUS_VOICE_AUDIO,
+    WS_MSG_CONTINUOUS_VOICE_STOP,
+    WS_MSG_VOICE_BARGE_IN,
 )
 from sunday.core.llm.router import llm_router
-from sunday.core.voice import stt, tts
+from sunday.core.voice import stt, tts, vad
+from sunday.core.voice.vad import RollingVAD
 from sunday.database.engine import db
 from sunday.database.vector import vector_db
 from sunday.models.messages import Conversation, Message, MessageSource, Role
@@ -44,6 +49,7 @@ from sunday.utils.audio import decode_audio
 from sunday.utils.logging import log
 from sunday.agents.jobs import job_manager
 import uuid
+import numpy as np
 
 agent_manager = AgentManager(llm_router=llm_router)
 
@@ -269,8 +275,6 @@ async def _handle_chat(ws: WebSocket, data: dict, tts_enabled: bool = False) -> 
 
 async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict) -> None:
     """Handle end of voice input — transcribe, process, and respond with audio."""
-    conversation_id = data.get("conversation_id")
-
     if not audio_buffer:
         await _send_json(ws, WS_MSG_ERROR, {"message": "No audio received"})
         return
@@ -285,65 +289,74 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
         await _send_json(ws, WS_MSG_ERROR, {"message": "Audio decoding failed or empty audio"})
         return
 
-    transcribed_text = await asyncio.to_thread(stt.transcribe_numpy, audio_array)
+    await _process_voice_audio(ws, audio_array, data.get("conversation_id"), data)
 
-    if not transcribed_text:
-        await _send_json(ws, WS_MSG_ERROR, {"message": "Could not transcribe audio"})
-        return
 
-    log.info("voice.transcribed", text=transcribed_text[:100])
-
-    # Notify client of transcription
-    await _send_json(
-        ws,
-        WS_MSG_STATUS,
-        {
-            "status": "transcribed",
-            "text": transcribed_text,
-        },
-    )
-
-    # Load or create conversation
-    conversation: Conversation | None = None
-    if conversation_id:
-        conversation = await db.get_conversation(conversation_id)
-
-    if conversation is None:
-        conversation = Conversation()
-        await db.create_conversation(conversation)
-
-    # Save user message (from voice)
-    user_msg = Message(role=Role.USER, content=transcribed_text, source=MessageSource.VOICE)
-    conversation.add_message(user_msg)
-    await db.save_message(conversation.id, user_msg)
-
-    # Store memory in background
-    asyncio.create_task(
-        asyncio.to_thread(
-            _store_memory,
-            user_msg.id,
-            f"User (voice): {transcribed_text}",
-            conversation.id,
-            "user",
-        )
-    )
-
-    await _send_json(
-        ws,
-        WS_MSG_STATUS,
-        {
-            "status": "processing",
-            "conversation_id": conversation.id,
-        },
-    )
-
-    # Stream LLM response and synthesize TTS in chunks
-    context = conversation.get_context_messages(MAX_CONTEXT_MESSAGES)[:-1]
-    full_response = []
-    sentence_buffer = []
-
-    active_agent = _determine_agent(transcribed_text)
+async def _process_voice_audio(
+    ws: WebSocket, audio_array: np.ndarray, conversation_id: str | None, data: dict
+) -> None:
+    """Core speech processing logic — transcribes, saves context, runs agents, and streams TTS."""
     try:
+        await _send_json(ws, WS_MSG_STATUS, {"status": "transcribing"})
+        transcribed_text = await asyncio.to_thread(stt.transcribe_numpy, audio_array)
+
+        if not transcribed_text:
+            await _send_json(ws, WS_MSG_ERROR, {"message": "Could not transcribe audio"})
+            return
+
+        log.info("voice.transcribed", text=transcribed_text[:100])
+
+        # Notify client of transcription
+        await _send_json(
+            ws,
+            WS_MSG_STATUS,
+            {
+                "status": "transcribed",
+                "text": transcribed_text,
+            },
+        )
+
+        # Load or create conversation
+        conversation: Conversation | None = None
+        if conversation_id:
+            conversation = await db.get_conversation(conversation_id)
+
+        if conversation is None:
+            conversation = Conversation()
+            await db.create_conversation(conversation)
+
+        # Save user message (from voice)
+        user_msg = Message(role=Role.USER, content=transcribed_text, source=MessageSource.VOICE)
+        conversation.add_message(user_msg)
+        await db.save_message(conversation.id, user_msg)
+
+        # Store memory in background
+        asyncio.create_task(
+            asyncio.to_thread(
+                _store_memory,
+                user_msg.id,
+                f"User (voice): {transcribed_text}",
+                conversation.id,
+                "user",
+            )
+        )
+
+        await _send_json(
+            ws,
+            WS_MSG_STATUS,
+            {
+                "status": "processing",
+                "conversation_id": conversation.id,
+            },
+        )
+
+        # Stream LLM response and synthesize TTS in chunks
+        context = conversation.get_context_messages(MAX_CONTEXT_MESSAGES)[:-1]
+        full_response = []
+        sentence_buffer = []
+
+        active_agent = _determine_agent(transcribed_text)
+
         async for token in active_agent.stream(message=user_msg, context=context):
             full_response.append(token)
             sentence_buffer.append(token)
@@ -420,6 +433,10 @@ async def _handle_voice_end(ws: WebSocket, audio_buffer: list[bytes], data: dict
             },
         )
 
+    except asyncio.CancelledError:
+        log.info("ws.voice.cancelled")
+        with contextlib.suppress(Exception):
+            await _send_json(ws, WS_MSG_STATUS, {"status": "idle"})
     except Exception as e:
         log.error("ws.voice.failed", error=str(e))
         await _send_json(ws, WS_MSG_ERROR, {"message": f"Voice processing failed: {str(e)}"})
@@ -438,6 +455,12 @@ async def websocket_endpoint(ws: WebSocket) -> None:
 
     audio_buffer: list[bytes] = []
     tts_enabled: bool = False  # TTS for text chat, off by default
+    
+    # Continuous voice state variables
+    active_response_task: asyncio.Task | None = None
+    continuous_voice_active: bool = False
+    continuous_vad: RollingVAD | None = None
+    continuous_listening: bool = True
 
     try:
         while True:
@@ -452,35 +475,128 @@ async def websocket_endpoint(ws: WebSocket) -> None:
             msg_type = msg.get("type")
             data = msg.get("data", {})
 
+            # Helper to cancel active response safely
+            def cancel_active_response():
+                nonlocal active_response_task
+                if active_response_task and not active_response_task.done():
+                    log.info("ws.response.cancelled")
+                    active_response_task.cancel()
+                    active_response_task = None
+                    return True
+                return False
+
             if msg_type == WS_MSG_CHAT:
+                cancel_active_response()
                 # Check if the message includes a tts_enabled override
                 msg_tts = data.get("tts_enabled")
                 if msg_tts is not None:
                     tts_enabled = bool(msg_tts)
                 # Pass session_id so jobs know where to emit
                 data["session_id"] = session_id
-                await _handle_chat(ws, data, tts_enabled=tts_enabled)
+                active_response_task = asyncio.create_task(
+                    _handle_chat(ws, data, tts_enabled=tts_enabled)
+                )
 
             elif msg_type == WS_MSG_TTS_TOGGLE:
                 tts_enabled = bool(data.get("enabled", False))
                 log.info("ws.tts_toggle", enabled=tts_enabled)
 
             elif msg_type == WS_MSG_VOICE_AUDIO:
-                # Accumulate audio chunks
+                # Accumulate standard push-to-talk chunks
                 audio_b64 = data.get("audio", "")
                 if audio_b64:
                     audio_buffer.append(base64.b64decode(audio_b64))
 
             elif msg_type == WS_MSG_VOICE_END:
-                await _handle_voice_end(ws, audio_buffer, data)
+                cancel_active_response()
+                active_response_task = asyncio.create_task(
+                    _handle_voice_end(ws, audio_buffer, data)
+                )
                 audio_buffer = []
+
+            # --- Continuous Voice Mode Messages ---
+
+            elif msg_type == WS_MSG_CONTINUOUS_VOICE_START:
+                log.info("ws.continuous_voice.start")
+                cancel_active_response()
+                continuous_voice_active = True
+                continuous_listening = True
+                # Start with a responsive speech detection count (2 chunks)
+                continuous_vad = RollingVAD(speech_start_chunks=2)
+                await _send_json(ws, WS_MSG_STATUS, {"status": "listening"})
+
+            elif msg_type == WS_MSG_CONTINUOUS_VOICE_STOP:
+                log.info("ws.continuous_voice.stop")
+                cancel_active_response()
+                continuous_voice_active = False
+                continuous_vad = None
+                await _send_json(ws, WS_MSG_STATUS, {"status": "idle"})
+
+            elif msg_type == WS_MSG_CONTINUOUS_VOICE_AUDIO:
+                if not continuous_voice_active or not continuous_vad:
+                    continue
+
+                audio_b64 = data.get("audio", "")
+                if not audio_b64:
+                    continue
+
+                # Ingest raw float32 PCM chunk (bypassing ffmpeg entirely for ultra-low latency)
+                try:
+                    audio_bytes = base64.b64decode(audio_b64)
+                    chunk = np.frombuffer(audio_bytes, dtype=np.float32)
+                except Exception as e:
+                    log.warning("ws.continuous_audio.parse_failed", error=str(e))
+                    continue
+
+                # Adaptive speech start threshold:
+                # If SUNDAY is currently speaking/processing, we raise the threshold to 4 chunks (~256ms)
+                # to prevent acoustic feedback/echo bleeding from triggering a false barge-in.
+                is_active = active_response_task and not active_response_task.done()
+                if is_active:
+                    continuous_vad.speech_start_chunks = 4
+                else:
+                    continuous_vad.speech_start_chunks = 2
+
+                # Run stateful VAD
+                state, speech_data = continuous_vad.process_audio(chunk)
+
+                if state == "speech_started":
+                    # User started speaking! Handle active barge-in/interruption
+                    if cancel_active_response():
+                        log.info("ws.barge_in.detected")
+                        # Tell client to instantly stop TTS playback and audio queuing
+                        await _send_json(ws, WS_MSG_VOICE_BARGE_IN, {})
+                    
+                    await _send_json(ws, WS_MSG_STATUS, {"status": "listening"})
+
+                elif state == "speech_ended" and speech_data is not None:
+                    # User finished speaking. Stop listening and kick off response loop in background
+                    log.info("ws.speech_ended.processing", length=len(speech_data))
+                    continuous_listening = False
+                    
+                    # Run processing in a background task
+                    active_response_task = asyncio.create_task(
+                        _process_voice_audio(
+                            ws, speech_data, data.get("conversation_id"), data
+                        )
+                    )
+
+            elif msg_type == "continuous_voice_resume_listening":
+                # Client finished playing SUNDAY's TTS response. Resume listening for the user.
+                if continuous_voice_active and continuous_vad:
+                    log.info("ws.continuous_voice.resume")
+                    continuous_vad.reset()
+                    continuous_listening = True
+                    await _send_json(ws, WS_MSG_STATUS, {"status": "listening"})
 
             else:
                 await _send_json(ws, WS_MSG_ERROR, {"message": f"Unknown message type: {msg_type}"})
 
     except WebSocketDisconnect:
         log.info("ws.disconnected")
+        cancel_active_response()
     except Exception as e:
         log.error("ws.error", error=str(e))
+        cancel_active_response()
     finally:
         job_manager.unregister_callback(session_id)
